@@ -585,6 +585,19 @@ contains
        call addfld( 'SFI     ',  'FRACTION',pverp,   'A', 'Interface-layer sat frac'                          ,phys_decomp)    
        call addfld( 'SPROD   ',  'M2/S3   ',pverp,   'A', 'Shear Production'                                  ,phys_decomp)   
     endif
+
+    !<--- yhc 1113, add output fields from compute_vdiff_offline
+    call addfld('sl_OFF_PBL  ', 'J/kg'   , pver, 'A', 'sl_OFF_PBL',  phys_decomp)
+    call addfld('qt_OFF_PBL  ', 'kg/kg'  , pver, 'A', 'qt_OFF_PBL',  phys_decomp)
+    call addfld('slv_OFF_PBL ', 'J/kg'   , pver, 'A', 'slv_OFF_PBL', phys_decomp)
+    call addfld('u_OFF_PBL   ', 'm/s'    , pver, 'A', 'u_OFF_PBL',   phys_decomp)
+    call addfld('v_OFF_PBL   ', 'm/s'    , pver, 'A', 'v_OFF_PBL',   phys_decomp)
+    call addfld('qv_OFF_PBL  ', 'kg/kg'  , pver, 'A', 'qv_OFF_PBL',  phys_decomp)
+    call addfld('ql_OFF_PBL  ', 'kg/kg'  , pver, 'A', 'ql_OFF_PBL',  phys_decomp)
+    call addfld('qi_OFF_PBL  ', 'kg/kg'  , pver, 'A', 'qi_OFF_PBL',  phys_decomp)
+    call addfld('t_OFF_PBL   ', 'K'      , pver, 'A', 't_OFF_PBL',   phys_decomp)
+    call addfld('rh_OFF_PBL  ', '%'      , pver, 'A', 'rh_OFF_PBL',  phys_decomp)
+    !---> yhc 1113
  
     ! ----------------------------
     ! determine default variables
@@ -888,6 +901,7 @@ contains
 
     !<--- yhc1113, add an offline compute_vdiff so I so try to modify the T,q, etc. right above the cloud top 
     type(physics_ptend) :: ptend_off
+    logical :: do_compute_vdiff_offline = .true.
     !---> yhc1113
 
     ! ----------------------- !
@@ -1236,6 +1250,17 @@ contains
                             tauresx       , tauresy            , 1            , cpairv(:,:,state%lchnk), rairi, &
                             do_molec_diff , compute_molec_diff , vd_lu_qdecomp, kvt )
 
+          !<--- yhc 1113
+          if (do_compute_vdiff_offline) then
+            call compute_vdiff_offline( lchnk, ncol, ztodt, state, &
+                 taux, tauy, shflx, cflx, ntop, nbot,                  &
+                 kvh, kvm, kvq, cgs, cgh,                              &
+                 state%zi, ksrftms, qmincg,                            &
+                 fieldlist_wet, fieldlist_molec,                       &
+                 cpairv(:,:,lchnk), rairi, do_molec_diff, ptend_off )
+          endif
+          !---> yhc 1113
+
         call handle_errmsg(errstring, subname="compute_vdiff", &
              extra_msg="Error in fieldlist_wet call from vertical_diffusion.")
         end select
@@ -1291,6 +1316,17 @@ contains
                             tautmsx       , tautmsy            , dtk          , topflx        , errstring     , &
                             tauresx       , tauresy            , 1            , cpairv(:,:,state%lchnk), rairi, &
                             do_molec_diff , compute_molec_diff , vd_lu_qdecomp )
+
+          !<--- yhc 1113
+          if (do_compute_vdiff_offline) then
+            call compute_vdiff_offline( lchnk, ncol, ztodt, state, &
+                 taux, tauy, shflx, cflx, ntop, nbot,                  &
+                 kvh, kvm, kvq, cgs, cgh,                              &
+                 state%zi, ksrftms, qmincg,                            &
+                 fieldlist_dry, fieldlist_molec,                       &
+                 cpairv(:,:,lchnk), rairi, do_molec_diff, ptend_off )
+          endif
+          !---> yhc 1113
 
         call handle_errmsg(errstring, subname="compute_vdiff", &
              extra_msg="Error in fieldlist_dry call from vertical_diffusion.")
@@ -1668,7 +1704,7 @@ contains
                                           ntop, nbot,                             &
                                           kvh_in, kvm_in, kvq_in, cgs_in, cgh_in, &
                                           zi, ksrftms, qmincg_in,                 &
-                                          fieldlist_wet_in, fieldlist_dry_in, fieldlist_molec_in,   &
+                                          fieldlist_in,  fieldlist_molec_in,   &
                                           cpairv_in, rairi_in,                    &
                                           do_molec_diff,                          &
                                           ptend_off )
@@ -1707,8 +1743,7 @@ contains
       real(r8), intent(in)            :: ksrftms(pcols)
       real(r8), intent(in)            :: qmincg_in(pcnst)
 
-      type(vdiff_selector), intent(in) :: fieldlist_wet_in
-      type(vdiff_selector), intent(in) :: fieldlist_dry_in
+      type(vdiff_selector), intent(in) :: fieldlist_in
       type(vdiff_selector), intent(in) :: fieldlist_molec_in
 
       real(r8), intent(in)            :: cpairv_in(pcols,pver)
@@ -1802,7 +1837,7 @@ contains
                           taux, tauy, shflx, cflx, ntop, nbot,                    &
                           kvh_in, kvm_off, kvq_off, cgs_off, cgh_off,            &
                           zi, ksrftms, qmincg_in,                                 &
-                          fieldlist_wet_in, fieldlist_molec_in,                   &
+                          fieldlist_in, fieldlist_molec_in,                   &
                           u_off, v_off, q_off, s_off,                             &
                           tautmsx_off, tautmsy_off, dtk_off, topflx_off,          &
                           errstring,                                              &
