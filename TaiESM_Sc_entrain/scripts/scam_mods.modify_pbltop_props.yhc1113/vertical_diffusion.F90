@@ -2000,11 +2000,23 @@ contains
       real(r8) :: ftem(pcols,pver)                                    ! Saturation vapor pressure before PBL
       real(r8) :: tem2(pcols,pver)                                    ! Saturation specific humidity and RH
 
-      integer :: i
+      real(r8) :: zint(pver+1)   ! interface height (m)
+      real(r8) :: zmid(pver)     ! interface height (m)
 
-      !logical :: do_print_out = .true.
-      logical :: do_print_out = .false.
+      real(r8) :: slope
+      integer :: i,k
 
+      logical :: do_print_out = .true.
+      !logical :: do_print_out = .false.
+
+      integer, parameter :: do_modify_cldtop_props = 1  ! modify s & q of the layer just above the cloud layer
+                                                        ! 1: extropolate from the free troposphere
+      real(r8), parameter :: ql_thresh  = 1.e-10_r8   ! kg/kg
+      real(r8), parameter :: kvh_thresh = 1.e-10_r8   ! m2/s (avoid floating noise)
+      real(r8), parameter :: ratio_qq   = 1._r8       ! example blend weight (0-1), V_new = ratio_qq * V(k-1) + (1-ratio_qq) * V(k)
+      integer :: k_cldtop(pcols)
+
+!-----------------------------------
       if (do_print_out) then
         write(iulog,*) '----------------- compute_vdiff_offline INPUTS -----------------'
         write(iulog,*) 'fieldlist_type        = ', fieldlist_type
@@ -2085,6 +2097,46 @@ contains
       !-----------------------------!
       ! e.g.:
       ! s_off(:ncol,:) = s_off(:ncol,:) + 0.5_r8
+      !q_off(:ncol,:,1) = q_off(:ncol,:,1) + 1.e-3_r8
+
+      if (do_modify_cldtop_props .ge. 1) then
+  
+        !--- find the vertical index of cloud top
+        k_cldtop(:) = 0   ! 0 => no (mixing-active) cloud found in the column
+
+        do i = 1, ncol
+
+          !--- get altitudes at interface and midpoints
+          zint(:) = state%zi(i,:)
+          do k=1,pver
+            zmid(k) = 0.5_r8 * (zint(k) + zint(k+1))
+          enddo
+          write(iulog,*) 'zmid             = ', zmid
+
+          !--- find the vertical index of the cloud layer  
+          do k = 1, pver                       ! scan from model TOP downwards
+            if ( state%q(i,k,ixcldliq) > ql_thresh ) then
+              ! mixing-active if either adjacent interface has non-trivial kvh
+              if ( kvh_in(i,k) > kvh_thresh  ) then
+                k_cldtop(i) = k
+                exit
+              end if
+            end if
+          end do    ! end k loop
+
+          !---
+          if (do_modify_cldtop_props .eq. 1) then
+            if (k_cldtop(i) > 0) then   
+              k = k_cldtop(i) 
+              slope = (s_off(i,k-2) - s_off(i,k-1)) / (zmid(k-2) - zmid(k-1))        
+              s_off(i, k-1) = s_off(i, k-1) - slope*(zmid(k-1) - zint(k))
+            endif
+          endif     ! end if, do_modify_cldtop_props=1
+
+        end do      ! end i loop
+
+      endif         ! end if of do_modify_cldtop_props.eq
+      
 
       sl_pre_PBL_off(:ncol,:pver)  = s_off(:ncol,:) -   latvap * q_off(:ncol,:,ixcldliq) &
                                              - ( latvap + latice) * q_off(:ncol,:,ixcldice)
