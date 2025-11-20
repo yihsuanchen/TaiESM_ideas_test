@@ -2003,7 +2003,7 @@ contains
       real(r8) :: zint(pver+1)   ! interface height (m)
       real(r8) :: zmid(pver)     ! interface height (m)
 
-      real(r8) :: slope
+      real(r8) :: slope_s, slope_qt, s_tmp0, qt_tmp0
       integer :: i,k
 
       logical :: do_print_out = .true.
@@ -2098,45 +2098,57 @@ contains
       ! e.g.:
       ! s_off(:ncol,:) = s_off(:ncol,:) + 0.5_r8
       !q_off(:ncol,:,1) = q_off(:ncol,:,1) + 1.e-3_r8
-
-      if (do_modify_cldtop_props .ge. 1) then
-  
-        !--- find the vertical index of cloud top
-        k_cldtop(:) = 0   ! 0 => no (mixing-active) cloud found in the column
-
-        do i = 1, ncol
-
-          !--- get altitudes at interface and midpoints
-          zint(:) = state%zi(i,:)
-          do k=1,pver
-            zmid(k) = 0.5_r8 * (zint(k) + zint(k+1))
-          enddo
-          write(iulog,*) 'zmid             = ', zmid
-
-          !--- find the vertical index of the cloud layer  
-          do k = 1, pver                       ! scan from model TOP downwards
-            if ( state%q(i,k,ixcldliq) > ql_thresh ) then
-              ! mixing-active if either adjacent interface has non-trivial kvh
-              if ( kvh_in(i,k) > kvh_thresh  ) then
-                k_cldtop(i) = k
-                exit
-              end if
-            end if
-          end do    ! end k loop
-
-          !---
-          if (do_modify_cldtop_props .eq. 1) then
-            if (k_cldtop(i) > 0) then   
-              k = k_cldtop(i) 
-              slope = (s_off(i,k-2) - s_off(i,k-1)) / (zmid(k-2) - zmid(k-1))        
-              s_off(i, k-1) = s_off(i, k-1) - slope*(zmid(k-1) - zint(k))
-            endif
-          endif     ! end if, do_modify_cldtop_props=1
-
-        end do      ! end i loop
-
-      endif         ! end if of do_modify_cldtop_props.eq
       
+      qt_off(:ncol,:pver)  = q_off(:ncol,:,1) + q_off(:ncol,:,ixcldliq) &
+                                               + q_off(:ncol,:,ixcldice)
+
+      do i = 1, ncol
+        !--- get altitudes at interface and midpoints
+        zint(:) = state%zi(i,:)
+        do k=1,pver
+          zmid(k) = 0.5_r8 * (zint(k) + zint(k+1))
+        enddo
+        !write(iulog,*) 'zmid             = ', zmid
+
+        !--- find the vertical index of the cloud layer  
+        k_cldtop(:) = 0   ! 0 => no (mixing-active) cloud found in the column
+        do k = 1, pver                       ! scan from model TOP downwards
+          if ( state%q(i,k,ixcldliq) > ql_thresh ) then
+            ! mixing-active if either adjacent interface has non-trivial kvh
+            if ( kvh_in(i,k) > kvh_thresh  ) then
+              k_cldtop(i) = k
+              exit
+            end if
+          end if
+        end do    ! end k loop
+      end do      ! end i loop
+
+      !---
+      if (do_modify_cldtop_props .eq. 1) then
+        do i = 1, ncol
+        
+          if (k_cldtop(i) > 0) then   
+ 
+            !--- linear extrapolation to compute s and qt at the cloud top
+            k = k_cldtop(i) 
+            slope_s = (s_off(i,k-2) - s_off(i,k-1)) / (zmid(k-2) - zmid(k-1))
+            s_tmp0  = s_off(i, k-1) - slope_s*(zmid(k-1) - zint(k))
+
+            slope_qt = (qt_off(i,k-2) - qt_off(i,k-1)) / (zmid(k-2) - zmid(k-1))
+            qt_tmp0  = qt_off(i, k-1) - slope_qt*(zmid(k-1) - zint(k))
+
+            !--- make sure the slope and value 
+            if (slope_s >= 0. .and. s_tmp0 > s_off(i,k-1) ) then
+              s_off(i, k-1) = s_tmp0
+            endif
+
+            if (slope_qt <= 0. .and. qt_tmp0 < s_off(i,k-1) ) then
+              q_off(i, k-1, 1) = qt_tmp0
+            endif
+
+          endif  ! end if, k_cldtop
+        enddo    ! end i loop      
+      endif      ! end if, do_modify_cldtop_props=1
 
       sl_pre_PBL_off(:ncol,:pver)  = s_off(:ncol,:) -   latvap * q_off(:ncol,:,ixcldliq) &
                                              - ( latvap + latice) * q_off(:ncol,:,ixcldice)
