@@ -1344,6 +1344,22 @@ contains
                             tauresx       , tauresy            , 1            , cpairv(:,:,state%lchnk), rairi, &
                             do_molec_diff , compute_molec_diff , vd_lu_qdecomp, kvt )
 
+        !<--- yhc1113, vdiff offline calculation. Note taht *_tmp is replaced with *_off
+        if (do_modify_cldtop_props >= 0) then
+          call compute_vdiff( state%lchnk   ,                                                                     &
+                              pcols         , pver               , pcnst        , ncol          , state%pmid    , &
+                              state%pint    , state%rpdel        , state%t      , ztodt         , taux          , &
+                              tauy          , shflx              , cflx         , ntop          , nbot          , &
+                              kvh           , kvm                , kvq          , cgs           , cgh           , &
+                              state%zi      , ksrftms            , qmincg       , fieldlist_wet , fieldlist_molec,&
+                              !u_tmp         , v_tmp              , q_tmp        , s_tmp         ,                 &
+                              u_off         , v_off              , q_off        , s_off         ,                 &
+                              tautmsx       , tautmsy            , dtk          , topflx        , errstring     , &
+                              tauresx       , tauresy            , 1            , cpairv(:,:,state%lchnk), rairi, &
+                              do_molec_diff , compute_molec_diff , vd_lu_qdecomp, kvt )
+        endif
+        !---> yhc1113, vdiff offline calculation
+
         ! ---------------- After compute_vdiff ----------------
         !<--- yhc1113, print out for debugging
         !write(iulog,*) '----------------- compute_vdiff fieldlist_wet, OUTPUTS -----------------'
@@ -1498,6 +1514,22 @@ contains
                             tauresx       , tauresy            , 1            , cpairv(:,:,state%lchnk), rairi, &
                             do_molec_diff , compute_molec_diff , vd_lu_qdecomp )
 
+        !<--- yhc1113, vdiff offline calculation. Note taht *_tmp is replaced with *_off
+        if (do_modify_cldtop_props >= 0) then
+          call compute_vdiff( state%lchnk   ,                                                                     &
+                              pcols         , pver               , pcnst        , ncol          , state%pmiddry , &
+                              state%pintdry , state%rpdeldry     , state%t      , ztodt         , taux          , &       
+                              tauy          , shflx              , cflx         , ntop          , nbot          , &       
+                              kvh           , kvm                , kvq          , cgs           , cgh           , &   
+                              state%zi      , ksrftms            , qmincg       , fieldlist_dry , fieldlist_molec,&
+                              !u_tmp         , v_tmp              , q_tmp        , s_tmp         ,                 &
+                              u_off         , v_off              , q_off        , s_off         ,                 &
+                              tautmsx       , tautmsy            , dtk          , topflx        , errstring     , &
+                              tauresx       , tauresy            , 1            , cpairv(:,:,state%lchnk), rairi, &
+                              do_molec_diff , compute_molec_diff , vd_lu_qdecomp )
+        endif
+        !---> yhc1113, vdiff offline calculation.
+      
         !<--- yhc1113, print out for debugging
         !write(iulog,*) '----------------- compute_vdiff fieldlist_dry, OUTPUTS -----------------'
 
@@ -1566,6 +1598,9 @@ contains
     ! -------------------------------------------------------- !
     ! Diagnostics and output writing after applying PBL scheme !
     ! -------------------------------------------------------- !
+
+    write(iulog,*) 's_tmp - s_off',s_tmp-s_off
+    write(iulog,*) 'qv_tmp - qv_off',q_tmp(:,:,1)-q_off(:,:,1)
 
     sl(:ncol,:pver)  = s_tmp(:ncol,:) -   latvap           * q_tmp(:ncol,:,ixcldliq) &
                                       - ( latvap + latice) * q_tmp(:ncol,:,ixcldice)
