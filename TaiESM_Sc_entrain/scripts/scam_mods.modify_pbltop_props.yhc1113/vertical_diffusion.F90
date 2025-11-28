@@ -920,6 +920,13 @@ contains
     real(r8) :: u_in(pcols,pver)
     real(r8) :: v_in(pcols,pver)
     real(r8) :: q_in(pcols,pver,pcnst)
+
+    integer, parameter :: do_modify_cldtop_props = 0
+    !integer, parameter :: do_modify_cldtop_props = 1
+    real(r8) :: s_off(pcols,pver)
+    real(r8) :: u_off(pcols,pver)
+    real(r8) :: v_off(pcols,pver)
+    real(r8) :: q_off(pcols,pver,pcnst)
     !---> yhc1113
 
     ! ----------------------- !
@@ -1215,6 +1222,11 @@ contains
     call outfld( 't_pre_PBL    ', state%t,                   pcols, lchnk )
     call outfld( 'rh_pre_PBL   ', ftem_prePBL,               pcols, lchnk )
 
+    !<--- yhc1113
+    call get_inputs_vdiff_offline ( lchnk, state, ncol, kvh,         &
+                                    do_modify_cldtop_props, s_off, q_off, u_off, v_off)
+    !---> yhc1113
+
     ! --------------------------------------------------------------------------------- !
     ! Call the diffusivity solver and solve diffusion equation                          !
     ! The final two arguments are optional function references to                       !
@@ -1296,8 +1308,8 @@ contains
         
         !write(iulog,*) 'u_tmp (input)     = ', u_tmp
         !write(iulog,*) 'v_tmp (input)     = ', v_tmp
-        write(iulog,*) 'q_tmp (input)     = ', q_tmp(:,:,1)
-        write(iulog,*) 's_tmp (input)     = ', s_tmp
+        !write(iulog,*) 'q_tmp (input)     = ', q_tmp(:,:,1)
+        !write(iulog,*) 's_tmp (input)     = ', s_tmp
         
         !write(iulog,*) 'tautmsx (input)   = ', tautmsx
         !write(iulog,*) 'tautmsy (input)   = ', tautmsy
@@ -1313,12 +1325,12 @@ contains
         
         !<--- yhc1113, tauresx & tauresy will be updated by compute_vdiff. 
         !              Save their original values and pass to compute_vdiff_offline
-        tauresx_in(:) = tauresx(:)
-        tauresy_in(:) = tauresy(:)
-        u_in    (:,:)   = u_tmp(:,:)
-        v_in    (:,:)   = v_tmp(:,:)
-        s_in    (:,:)   = s_tmp(:,:)
-        q_in    (:,:,:) = q_tmp(:,:,:)
+        !tauresx_in(:) = tauresx(:)
+        !tauresy_in(:) = tauresy(:)
+        !u_in    (:,:)   = u_tmp(:,:)
+        !v_in    (:,:)   = v_tmp(:,:)
+        !s_in    (:,:)   = s_tmp(:,:)
+        !q_in    (:,:,:) = q_tmp(:,:,:)
         !---> yhc1113
 
         call compute_vdiff( state%lchnk   ,                                                                     &
@@ -1355,16 +1367,16 @@ contains
         !---> yhc1113, print out for debugging
           
           !<--- yhc1113, add compute_vdiff_offline
-          if (do_compute_vdiff_offline) then
-            fieldlist_type = "wet"
-            call compute_vdiff_offline( state%lchnk, ncol, ztodt, state,            &
-                 taux, tauy, shflx, cflx, ntop, nbot,                               &
-                 kvh, kvm, kvq, cgs, cgh,                                           &
-                 state%zi, ksrftms, qmincg,                                         &
-                 u_in         , v_in              , q_in        , s_in, tauresx_in  , tauresy_in,                                         &
-                 fieldlist_type, fieldlist_dry, fieldlist_wet, fieldlist_molec,     &
-                 cpairv(:,:,state%lchnk), rairi, do_molec_diff, ptend_off )
-          endif
+          !if (do_compute_vdiff_offline) then
+          !  fieldlist_type = "wet"
+          !  call compute_vdiff_offline( state%lchnk, ncol, ztodt, state,            &
+          !       taux, tauy, shflx, cflx, ntop, nbot,                               &
+          !       kvh, kvm, kvq, cgs, cgh,                                           &
+          !       state%zi, ksrftms, qmincg,                                         &
+          !       u_in         , v_in              , q_in        , s_in, tauresx_in  , tauresy_in,                                         &
+          !       fieldlist_type, fieldlist_dry, fieldlist_wet, fieldlist_molec,     &
+          !       cpairv(:,:,state%lchnk), rairi, do_molec_diff, ptend_off )
+          !endif
           !---> yhc1113
 
         call handle_errmsg(errstring, subname="compute_vdiff", &
@@ -1467,12 +1479,12 @@ contains
 
         !<--- yhc1113, tauresx & tauresy will be updated by compute_vdiff. 
         !              Save their original values and pass to compute_vdiff_offline
-        tauresx_in(:) = tauresx(:)
-        tauresy_in(:) = tauresy(:)
-        u_in    (:,:)   = u_tmp(:,:)
-        v_in    (:,:)   = v_tmp(:,:)
-        s_in    (:,:)   = s_tmp(:,:)
-        q_in    (:,:,:) = q_tmp(:,:,:)
+        !tauresx_in(:) = tauresx(:)
+        !tauresy_in(:) = tauresy(:)
+        !u_in    (:,:)   = u_tmp(:,:)
+        !v_in    (:,:)   = v_tmp(:,:)
+        !s_in    (:,:)   = s_tmp(:,:)
+        !q_in    (:,:,:) = q_tmp(:,:,:)
         !---> yhc1113
                 
         call compute_vdiff( state%lchnk   ,                                                                     &
@@ -1508,16 +1520,16 @@ contains
         !---> yhc1113, print out for debugging
           
           !<--- yhc1113, add compute_vdiff_offline
-          if (do_compute_vdiff_offline) then
-            fieldlist_type = "dry"
-            call compute_vdiff_offline( state%lchnk, ncol, ztodt, state,            &
-                 taux, tauy, shflx, cflx, ntop, nbot,                               &
-                 kvh, kvm, kvq, cgs, cgh,                                           &
-                 state%zi, ksrftms, qmincg,                                         &
-                 u_in         , v_in              , q_in        , s_in, tauresx_in  , tauresy_in,                                         &
-                 fieldlist_type, fieldlist_dry, fieldlist_wet, fieldlist_molec,     &
-                 cpairv(:,:,state%lchnk), rairi, do_molec_diff, ptend_off )
-          endif
+          !if (do_compute_vdiff_offline) then
+          !  fieldlist_type = "dry"
+          !  call compute_vdiff_offline( state%lchnk, ncol, ztodt, state,            &
+          !       taux, tauy, shflx, cflx, ntop, nbot,                               &
+          !       kvh, kvm, kvq, cgs, cgh,                                           &
+          !       state%zi, ksrftms, qmincg,                                         &
+          !       u_in         , v_in              , q_in        , s_in, tauresx_in  , tauresy_in,                                         &
+          !       fieldlist_type, fieldlist_dry, fieldlist_wet, fieldlist_molec,     &
+          !       cpairv(:,:,state%lchnk), rairi, do_molec_diff, ptend_off )
+          !endif
           !---> yhc1113
 
         call handle_errmsg(errstring, subname="compute_vdiff", &
@@ -1891,7 +1903,7 @@ contains
   end subroutine positive_moisture
 
   !<--- yhc1113, add do_offline_vdiff so I so try to modify the T,q, etc. right above the cloud top 
-   subroutine compute_vdiff_offline(      lchnk, ncol, ztodt, state,             &
+   subroutine compute_vdiff_offline_old(      lchnk, ncol, ztodt, state,             &
                                           taux, tauy, shflx, cflx,               &
                                           ntop, nbot,                             &
                                           kvh_in, kvm_in, kvq_in, cgs_in, cgh_in, &
@@ -2291,7 +2303,148 @@ contains
       call outfld('t_aft_PBL_off',   t_off,    pcols, lchnk)
       call outfld('rh_aft_PBL_off',  rh_off,   pcols, lchnk)
 
-   end subroutine compute_vdiff_offline
+   end subroutine compute_vdiff_offline_old
   !---> yhc1113
+
+  !<--- yhc1113
+  subroutine get_inputs_vdiff_offline ( lchnk, state, ncol, kvh,         &
+                                        do_modify_cldtop_props, s_off, q_off, u_off, v_off)
+
+    use physics_types,      only : physics_state, physics_ptend, physics_ptend_init
+    use cam_history,        only : outfld
+  
+    implicit none
+  
+    !--------------------------------------------------------------------
+    ! Arguments
+    !--------------------------------------------------------------------
+    ! NOTE: adjust the type name of "state" as appropriate in your code
+    integer,             intent(in) :: lchnk       ! chunk index
+    integer,             intent(in) :: ncol
+    type(physics_state), intent(in) :: state
+    real(r8),            intent(in)  :: kvh(pcols,pver+1)
+  
+    integer,  intent(in)  :: do_modify_cldtop_props    
+    real(r8), intent(out) :: s_off(pcols,pver)
+    real(r8), intent(out) :: q_off(pcols,pver,pcnst)
+    real(r8), intent(out) :: u_off(pcols,pver)
+    real(r8), intent(out) :: v_off(pcols,pver)
+  
+    !--------------------------------------------------------------------
+    ! Local variables
+    !--------------------------------------------------------------------
+    real(r8) :: sl_pre_PBL_off(pcols,pver)
+    real(r8) :: qt_pre_PBL_off(pcols,pver)
+    real(r8) :: slv_pre_PBL_off(pcols,pver)
+    real(r8) :: t_pre_PBL_off(pcols,pver)
+    real(r8) :: qt_off(pcols,pver)
+
+    integer  :: i, k
+    integer  :: k_cldtop(ncol)
+    real(r8) :: zint(pver+1)
+    real(r8) :: zmid(pver)
+    real(r8) :: slope_s, slope_qt
+    real(r8) :: s_tmp0, qt_tmp0
+
+    real(r8), parameter :: ql_thresh  = 1.e-10_r8   ! kg/kg
+    real(r8), parameter :: kvh_thresh = 1.e-10_r8   ! m2/s (avoid floating noise)
+
+    !logical :: do_print_out = .true.
+    logical :: do_print_out = .false.
+  
+    !--------------------------------------------------------------------
+    ! Body
+    !--------------------------------------------------------------------
+ 
+    !--- initialize return fields
+    q_off(:ncol,:,:) = state%q(:ncol,:,:)
+    s_off(:ncol,:)   = state%s(:ncol,:)
+    u_off(:ncol,:)   = state%u(:ncol,:)
+    v_off(:ncol,:)   = state%v(:ncol,:)
+
+    qt_off(:ncol,:pver)  = q_off(:ncol,:,1) + q_off(:ncol,:,ixcldliq) &
+                                            + q_off(:ncol,:,ixcldice)
+
+    !--- find cloud-top level for each column
+    k_cldtop(:) = 0   ! 0 => no (mixing-active) cloud found in the column
+  
+    do i = 1, ncol
+      !--- get altitudes at interface and midpoints
+      zint(:) = state%zi(i,:)
+      do k = 1, pver
+        zmid(k) = 0.5_r8 * (zint(k) + zint(k+1))
+      enddo
+      !write(iulog,*) 'zmid             = ', zmid
+  
+      !--- find the vertical index of the cloud layer (scan from top)
+      do k = 1, pver
+        if ( state%q(i,k,ixcldliq) > ql_thresh ) then
+          ! mixing-active if either adjacent interface has non-trivial kvh
+          if ( kvh(i,k) > kvh_thresh ) then
+            k_cldtop(i) = k
+            exit
+          end if
+        end if
+      end do
+    end do
+  
+    !---
+    if (do_modify_cldtop_props .eq. 1) then
+      do i = 1, ncol
+  
+        if (k_cldtop(i) > 3) then
+          !--- linear extrapolation to compute s and qt at the cloud top
+          k = k_cldtop(i)
+  
+          slope_s = (s_off(i,k-2) - s_off(i,k-1)) / (zmid(k-2) - zmid(k-1))
+          s_tmp0  = s_off(i,k-1) - slope_s*(zmid(k-1) - zint(k))
+  
+          slope_qt = (qt_off(i,k-2) - qt_off(i,k-1)) / (zmid(k-2) - zmid(k-1))
+          qt_tmp0  = qt_off(i,k-1) - slope_qt*(zmid(k-1) - zint(k))
+  
+          if (do_print_out) then
+            write(iulog,*) 'k_cldtop, zmid', k, zmid(k)
+            write(iulog,*) 'zmid', zmid
+            write(iulog,*) 'cldliq', state%q(i,:,ixcldliq)
+            write(iulog,*) 's_cldtop, s_old, s_new, s_slope',  &
+                           s_off(i,k), s_off(i,k-1), s_tmp0, slope_s
+            write(iulog,*) 'qt_cldtop, qt_old, qt_new, qt_slope', &
+                           qt_off(i,k), qt_off(i,k-1), qt_tmp0, slope_qt
+          endif
+  
+          !--- make sure the slope and value
+          if (      slope_s  >= 0._r8 .and. s_tmp0  > s_off(i,k) &
+              .and. slope_qt <= 0._r8 .and. qt_tmp0 < qt_off(i,k) ) then
+            s_off(i,k-1)      = s_tmp0
+            q_off(i,k-1,1)    = qt_tmp0 - q_off(i,k-1,ixcldliq) - q_off(i,k-1,ixcldice)
+            if (do_print_out) write(iulog,*) "replace cloud top s and q, yaya"
+          endif
+  
+        endif  ! k_cldtop(i) > 0
+      enddo    ! i
+    endif      ! do_modify_cldtop_props
+  
+    !--- diagnose sl, qt, slv, and t
+    sl_pre_PBL_off(:ncol,:pver)  = s_off(:ncol,:) -   latvap * q_off(:ncol,:,ixcldliq) &
+                                           - ( latvap + latice) * q_off(:ncol,:,ixcldice)
+    qt_pre_PBL_off(:ncol,:pver)  = q_off(:ncol,:,1) + q_off(:ncol,:,ixcldliq) &
+                                             + q_off(:ncol,:,ixcldice)
+    slv_pre_PBL_off(:ncol,:pver) = sl_pre_PBL_off(:ncol,:pver) * ( 1._r8 + zvir*qt_pre_PBL_off(:ncol,:pver) )
+
+    t_pre_PBL_off(:ncol,:pver) = ( s_off(:ncol,:) - gravit * state%zm(:ncol,:) ) / cpair
+  
+    !--- output
+    call outfld( 'qt_pre_PBL_off   ', qt_pre_PBL_off,          pcols, lchnk )
+    call outfld( 'sl_pre_PBL_off   ', sl_pre_PBL_off,          pcols, lchnk )
+    call outfld( 'slv_pre_PBL_off  ', slv_pre_PBL_off,         pcols, lchnk )
+    call outfld( 'u_pre_PBL_off    ', u_off,                   pcols, lchnk )
+    call outfld( 'v_pre_PBL_off    ', v_off,                   pcols, lchnk )
+    call outfld( 'qv_pre_PBL_off   ', q_off(:ncol,:,1),        pcols, lchnk )
+    call outfld( 'ql_pre_PBL_off   ', q_off(:ncol,:,ixcldliq), pcols, lchnk )
+    call outfld( 'qi_pre_PBL_off   ', q_off(:ncol,:,ixcldice), pcols, lchnk )
+    call outfld( 't_pre_PBL_off    ', t_pre_PBL_off,           pcols, lchnk )
+  
+  end subroutine get_inputs_vdiff_offline
+
 
 end module vertical_diffusion
