@@ -910,19 +910,10 @@ contains
     logical  :: lq(pcnst)
 
     !<--- yhc1113, add an offline compute_vdiff so I so try to modify the T,q, etc. right above the cloud top 
-    type(physics_ptend) :: ptend_off
-    !logical :: do_compute_vdiff_offline = .false.
-    logical :: do_compute_vdiff_offline = .true.
-    character(len=20) :: fieldlist_type
-    real(r8) :: tauresx_in(pcols)
-    real(r8) :: tauresy_in(pcols)
-    real(r8) :: s_in(pcols,pver)
-    real(r8) :: u_in(pcols,pver)
-    real(r8) :: v_in(pcols,pver)
-    real(r8) :: q_in(pcols,pver,pcnst)
-
     integer, parameter :: do_modify_cldtop_props = 0
     !integer, parameter :: do_modify_cldtop_props = 1
+
+    type(physics_ptend) :: ptend_off
     real(r8) :: s_off(pcols,pver)
     real(r8) :: u_off(pcols,pver)
     real(r8) :: v_off(pcols,pver)
@@ -1273,66 +1264,6 @@ contains
 
         case ( 'diag_TKE', 'HB','HBR' )
 
-        !<--- yhc1113, print out for debugging
-        !write(iulog,*) '----------------- compute_vdiff fieldlist_wet, INPUTSS -----------------'
-        !write(iulog,*) 'state%lchnk       = ', state%lchnk
-        !write(iulog,*) 'pcols             = ', pcols
-        !write(iulog,*) 'pver              = ', pver
-        !write(iulog,*) 'pcnst             = ', pcnst
-        !write(iulog,*) 'ncol              = ', ncol
-        
-        !write(iulog,*) 'pmid              = ', state%pmid
-        !write(iulog,*) 'pint              = ', state%pint
-        !write(iulog,*) 'rpdel             = ', state%rpdel
-        !write(iulog,*) 't                 = ', state%t
-        
-        !write(iulog,*) 'ztodt             = ', ztodt
-        
-        !write(iulog,*) 'taux              = ', taux
-        !write(iulog,*) 'tauy              = ', tauy
-        !write(iulog,*) 'shflx             = ', shflx
-        !write(iulog,*) 'cflx              = ', cflx
-        
-        !write(iulog,*) 'ntop              = ', ntop
-        !write(iulog,*) 'nbot              = ', nbot
-        
-        !write(iulog,*) 'kvh               = ', kvh
-        !write(iulog,*) 'kvm               = ', kvm
-        !write(iulog,*) 'kvq               = ', kvq
-        !write(iulog,*) 'cgs               = ', cgs
-        !write(iulog,*) 'cgh               = ', cgh
-        
-        !write(iulog,*) 'zi                = ', state%zi
-        !write(iulog,*) 'ksrftms           = ', ksrftms
-        !write(iulog,*) 'qmincg            = ', qmincg
-        
-        !write(iulog,*) 'u_tmp (input)     = ', u_tmp
-        !write(iulog,*) 'v_tmp (input)     = ', v_tmp
-        !write(iulog,*) 'q_tmp (input)     = ', q_tmp(:,:,1)
-        !write(iulog,*) 's_tmp (input)     = ', s_tmp
-        
-        !write(iulog,*) 'tautmsx (input)   = ', tautmsx
-        !write(iulog,*) 'tautmsy (input)   = ', tautmsy
-        
-        !write(iulog,*) 'tauresx (input)   = ', tauresx
-        !write(iulog,*) 'tauresy (input)   = ', tauresy
-        
-        !write(iulog,*) 'cpairv            = ', cpairv(:,:,state%lchnk)
-        !write(iulog,*) 'rairi             = ', rairi
-        
-        !write(iulog,*) 'do_molec_diff     = ', do_molec_diff
-        !---> yhc1113, print out for debugging
-        
-        !<--- yhc1113, tauresx & tauresy will be updated by compute_vdiff. 
-        !              Save their original values and pass to compute_vdiff_offline
-        !tauresx_in(:) = tauresx(:)
-        !tauresy_in(:) = tauresy(:)
-        !u_in    (:,:)   = u_tmp(:,:)
-        !v_in    (:,:)   = v_tmp(:,:)
-        !s_in    (:,:)   = s_tmp(:,:)
-        !q_in    (:,:,:) = q_tmp(:,:,:)
-        !---> yhc1113
-
         call compute_vdiff( state%lchnk   ,                                                                     &
                             pcols         , pver               , pcnst        , ncol          , state%pmid    , &
                             state%pint    , state%rpdel        , state%t      , ztodt         , taux          , &
@@ -1361,39 +1292,6 @@ contains
         !---> yhc1113, vdiff offline calculation
 
         ! ---------------- After compute_vdiff ----------------
-        !<--- yhc1113, print out for debugging
-        !write(iulog,*) '----------------- compute_vdiff fieldlist_wet, OUTPUTS -----------------'
-
-        !write(iulog,*) 'u_tmp (output)     = ', u_tmp
-        !write(iulog,*) 'v_tmp (output)     = ', v_tmp
-        !write(iulog,*) 'q_tmp (output)     = ', q_tmp
-        !write(iulog,*) 's_tmp (output)     = ', s_tmp
-        
-        !write(iulog,*) 'dtk (output)      = ', dtk
-        !write(iulog,*) 'topflx (output)   = ', topflx
-        !write(iulog,*) 'errstring (output)= ', trim(errstring)
-        
-        !write(iulog,*) 'tautmsx (output)  = ', tautmsx
-        !write(iulog,*) 'tautmsy (output)  = ', tautmsy
-        
-        !write(iulog,*) 'tauresx (output)  = ', tauresx
-        !write(iulog,*) 'tauresy (output)  = ', tauresy
-        
-        !write(iulog,*) 'kvt (output)      = ', kvt        
-        !---> yhc1113, print out for debugging
-          
-          !<--- yhc1113, add compute_vdiff_offline
-          !if (do_compute_vdiff_offline) then
-          !  fieldlist_type = "wet"
-          !  call compute_vdiff_offline( state%lchnk, ncol, ztodt, state,            &
-          !       taux, tauy, shflx, cflx, ntop, nbot,                               &
-          !       kvh, kvm, kvq, cgs, cgh,                                           &
-          !       state%zi, ksrftms, qmincg,                                         &
-          !       u_in         , v_in              , q_in        , s_in, tauresx_in  , tauresy_in,                                         &
-          !       fieldlist_type, fieldlist_dry, fieldlist_wet, fieldlist_molec,     &
-          !       cpairv(:,:,state%lchnk), rairi, do_molec_diff, ptend_off )
-          !endif
-          !---> yhc1113
 
         call handle_errmsg(errstring, subname="compute_vdiff", &
              extra_msg="Error in fieldlist_wet call from vertical_diffusion.")
@@ -1439,69 +1337,6 @@ contains
              extra_msg="Error in fieldlist_dry call from vertical_diffusion.")
 
         case ( 'diag_TKE', 'HB','HBR' )
-
-        !<--- yhc1113, print out for debugging
-        !write(iulog,*) '----------------- compute_vdiff fieldlist_dry, INPUTS -----------------'
-        !write(iulog,*) 'state%lchnk       = ', state%lchnk
-        !write(iulog,*) 'pcols             = ', pcols
-        !write(iulog,*) 'pver              = ', pver
-        !write(iulog,*) 'pcnst             = ', pcnst
-        !write(iulog,*) 'ncol              = ', ncol
-        
-        !write(iulog,*) 'pmid              = ', state%pmiddry
-        !write(iulog,*) 'pint              = ', state%pintdry
-        !write(iulog,*) 'rpdel             = ', state%rpdeldry
-        !write(iulog,*) 't                 = ', state%t
-        
-        !write(iulog,*) 'ztodt             = ', ztodt
-        
-        !write(iulog,*) 'taux              = ', taux
-        !write(iulog,*) 'tauy              = ', tauy
-        !write(iulog,*) 'shflx             = ', shflx
-        !write(iulog,*) 'cflx              = ', cflx
-        
-        !write(iulog,*) 'ntop              = ', ntop
-        !write(iulog,*) 'nbot              = ', nbot
-        
-        !write(iulog,*) 'kvh               = ', kvh
-        !write(iulog,*) 'kvm               = ', kvm
-        !write(iulog,*) 'kvq               = ', kvq
-        !write(iulog,*) 'cgs               = ', cgs
-        !write(iulog,*) 'cgh               = ', cgh
-        
-        !write(iulog,*) 'zi                = ', state%zi
-        !write(iulog,*) 'ksrftms           = ', ksrftms
-        !write(iulog,*) 'qmincg            = ', qmincg
-        
-        !write(iulog,*) 'state%u           = ', state%u
-        !write(iulog,*) 'u_tmp (input)     = ', u_tmp
-        !write(iulog,*) 'state%v           = ', state%v
-        !write(iulog,*) 'v_tmp (input)     = ', v_tmp
-        !write(iulog,*) 'q_tmp (input)     = ', q_tmp
-        !write(iulog,*) 'state%s           = ', state%s
-        !write(iulog,*) 's_tmp (input)     = ', s_tmp
-        
-        !write(iulog,*) 'tautmsx (input)   = ', tautmsx
-        !write(iulog,*) 'tautmsy (input)   = ', tautmsy
-        
-        !write(iulog,*) 'tauresx (input)   = ', tauresx
-        !write(iulog,*) 'tauresy (input)   = ', tauresy
-        
-        !write(iulog,*) 'cpairv            = ', cpairv(:,:,state%lchnk)
-        !write(iulog,*) 'rairi             = ', rairi
-        
-        !write(iulog,*) 'do_molec_diff     = ', do_molec_diff
-        !---> yhc1113, print out for debugging
-
-        !<--- yhc1113, tauresx & tauresy will be updated by compute_vdiff. 
-        !              Save their original values and pass to compute_vdiff_offline
-        !tauresx_in(:) = tauresx(:)
-        !tauresy_in(:) = tauresy(:)
-        !u_in    (:,:)   = u_tmp(:,:)
-        !v_in    (:,:)   = v_tmp(:,:)
-        !s_in    (:,:)   = s_tmp(:,:)
-        !q_in    (:,:,:) = q_tmp(:,:,:)
-        !---> yhc1113
                 
         call compute_vdiff( state%lchnk   ,                                                                     &
                             pcols         , pver               , pcnst        , ncol          , state%pmiddry , &
@@ -1529,40 +1364,6 @@ contains
                               do_molec_diff , compute_molec_diff , vd_lu_qdecomp )
         endif
         !---> yhc1113, vdiff offline calculation.
-      
-        !<--- yhc1113, print out for debugging
-        !write(iulog,*) '----------------- compute_vdiff fieldlist_dry, OUTPUTS -----------------'
-
-        !write(iulog,*) 'u_tmp (output)     = ', u_tmp
-        !write(iulog,*) 'v_tmp (output)     = ', v_tmp
-        !write(iulog,*) 'q_tmp (output)     = ', q_tmp
-        !write(iulog,*) 's_tmp (output)     = ', s_tmp
-        
-        !write(iulog,*) 'dtk (output)      = ', dtk
-        !write(iulog,*) 'topflx (output)   = ', topflx
-        !write(iulog,*) 'errstring (output)= ', trim(errstring)
-        
-        !write(iulog,*) 'tautmsx (output)  = ', tautmsx
-        !write(iulog,*) 'tautmsy (output)  = ', tautmsy
-        
-        !write(iulog,*) 'tauresx (output)  = ', tauresx
-        !write(iulog,*) 'tauresy (output)  = ', tauresy
-        
-        !write(iulog,*) 'kvt (output)      = ', kvt        
-        !---> yhc1113, print out for debugging
-          
-          !<--- yhc1113, add compute_vdiff_offline
-          !if (do_compute_vdiff_offline) then
-          !  fieldlist_type = "dry"
-          !  call compute_vdiff_offline( state%lchnk, ncol, ztodt, state,            &
-          !       taux, tauy, shflx, cflx, ntop, nbot,                               &
-          !       kvh, kvm, kvq, cgs, cgh,                                           &
-          !       state%zi, ksrftms, qmincg,                                         &
-          !       u_in         , v_in              , q_in        , s_in, tauresx_in  , tauresy_in,                                         &
-          !       fieldlist_type, fieldlist_dry, fieldlist_wet, fieldlist_molec,     &
-          !       cpairv(:,:,state%lchnk), rairi, do_molec_diff, ptend_off )
-          !endif
-          !---> yhc1113
 
         call handle_errmsg(errstring, subname="compute_vdiff", &
              extra_msg="Error in fieldlist_dry call from vertical_diffusion.")
@@ -1599,8 +1400,10 @@ contains
     ! Diagnostics and output writing after applying PBL scheme !
     ! -------------------------------------------------------- !
 
+    ! yhc1113
     write(iulog,*) 's_tmp - s_off',s_tmp-s_off
     write(iulog,*) 'qv_tmp - qv_off',q_tmp(:,:,1)-q_off(:,:,1)
+    ! yhc1113
 
     sl(:ncol,:pver)  = s_tmp(:ncol,:) -   latvap           * q_tmp(:ncol,:,ixcldliq) &
                                       - ( latvap + latice) * q_tmp(:ncol,:,ixcldice)
@@ -2341,7 +2144,7 @@ contains
    end subroutine compute_vdiff_offline_old
   !---> yhc1113
 
-  !<--- yhc1113
+  !<--- yhc1113, prepare input fields for vdiff offline calculations 
   subroutine get_inputs_vdiff_offline ( lchnk, state, ncol, kvh,         &
                                         do_modify_cldtop_props, s_off, q_off, u_off, v_off)
 
@@ -2480,6 +2283,7 @@ contains
     call outfld( 't_pre_PBL_off    ', t_pre_PBL_off,           pcols, lchnk )
   
   end subroutine get_inputs_vdiff_offline
+  !---> yhc1113, 
 
 
 end module vertical_diffusion
