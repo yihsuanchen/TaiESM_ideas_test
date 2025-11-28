@@ -911,6 +911,7 @@ contains
 
     !<--- yhc1113, add an offline compute_vdiff so I so try to modify the T,q, etc. right above the cloud top 
     type(physics_ptend) :: ptend_off
+    !logical :: do_compute_vdiff_offline = .false.
     logical :: do_compute_vdiff_offline = .true.
     character(len=20) :: fieldlist_type
     real(r8) :: tauresx_in(pcols)
@@ -1200,6 +1201,9 @@ contains
          tem2(:ncol,:), ftem(:ncol,:))
     ftem_prePBL(:ncol,:) = state%q(:ncol,:,1)/ftem(:ncol,:)*100._r8
 
+    write(iulog,*) 'qt_pre_PBL     = ', qt_prePBL
+    write(iulog,*) 'sl_pre_PBL     = ', sl_prePBL
+
     call outfld( 'qt_pre_PBL   ', qt_prePBL,                 pcols, lchnk )
     call outfld( 'sl_pre_PBL   ', sl_prePBL,                 pcols, lchnk )
     call outfld( 'slv_pre_PBL  ', slv_prePBL,                pcols, lchnk )
@@ -1292,8 +1296,8 @@ contains
         
         !write(iulog,*) 'u_tmp (input)     = ', u_tmp
         !write(iulog,*) 'v_tmp (input)     = ', v_tmp
-        !write(iulog,*) 'q_tmp (input)     = ', q_tmp
-        !write(iulog,*) 's_tmp (input)     = ', s_tmp
+        write(iulog,*) 'q_tmp (input)     = ', q_tmp(:,:,1)
+        write(iulog,*) 's_tmp (input)     = ', s_tmp
         
         !write(iulog,*) 'tautmsx (input)   = ', tautmsx
         !write(iulog,*) 'tautmsy (input)   = ', tautmsy
@@ -2009,7 +2013,7 @@ contains
       logical :: do_print_out = .true.
       !logical :: do_print_out = .false.
 
-      integer, parameter :: do_modify_cldtop_props = 1  ! modify s & q of the layer just above the cloud layer
+      integer, parameter :: do_modify_cldtop_props = 0  ! modify s & q of the layer just above the cloud layer
                                                         ! 1: extropolate from the free troposphere
       real(r8), parameter :: ql_thresh  = 1.e-10_r8   ! kg/kg
       real(r8), parameter :: kvh_thresh = 1.e-10_r8   ! m2/s (avoid floating noise)
@@ -2049,7 +2053,8 @@ contains
         write(iulog,*) 'state%zi              = ', zi
         write(iulog,*) 'ksrftms               = ', ksrftms
         write(iulog,*) 'qmincg_in             = ', qmincg_in
-        write(iulog,*) 'state%q               = ', state%q
+        write(iulog,*) 'state%qv              = ', state%q(:,:,1)
+        write(iulog,*) 'qv_in                 = ', q_in(:,:,1)
         write(iulog,*) 'state%u               = ', state%u
         write(iulog,*) 'u_in                  = ', u_in
         write(iulog,*) 'state%v               = ', state%v
@@ -2067,7 +2072,6 @@ contains
         
         write(iulog,*) 'do_molec_diff         = ', do_molec_diff
         
-
       endif
 
       !-----------------------------!
@@ -2100,7 +2104,7 @@ contains
       !q_off(:ncol,:,1) = q_off(:ncol,:,1) + 1.e-3_r8
       
       qt_off(:ncol,:pver)  = q_off(:ncol,:,1) + q_off(:ncol,:,ixcldliq) &
-                                               + q_off(:ncol,:,ixcldice)
+                                              + q_off(:ncol,:,ixcldice)
 
       do i = 1, ncol
         !--- get altitudes at interface and midpoints
@@ -2127,8 +2131,7 @@ contains
       if (do_modify_cldtop_props .eq. 1) then
         do i = 1, ncol
         
-          if (k_cldtop(i) > 0) then   
- 
+          if (k_cldtop(i) > 0) then    
             !--- linear extrapolation to compute s and qt at the cloud top
             k = k_cldtop(i) 
             slope_s = (s_off(i,k-2) - s_off(i,k-1)) / (zmid(k-2) - zmid(k-1))
@@ -2137,13 +2140,21 @@ contains
             slope_qt = (qt_off(i,k-2) - qt_off(i,k-1)) / (zmid(k-2) - zmid(k-1))
             qt_tmp0  = qt_off(i, k-1) - slope_qt*(zmid(k-1) - zint(k))
 
-            !--- make sure the slope and value 
-            if (slope_s >= 0. .and. s_tmp0 > s_off(i,k-1) ) then
-              s_off(i, k-1) = s_tmp0
-            endif
+            if (do_print_out) then  
+              write(iulog,*) 'fieldlist_type', fieldlist_type
+              write(iulog,*) 'k_cldtop, zmid', k, zmid(k)
+              write(iulog,*) 'zmid', zmid
+              write(iulog,*) 'cldliq', state%q(i,:,ixcldliq)
+              write(iulog,*) 's_cldtop, s_old, s_new, s_slope', s_off(i,k), s_off(i, k-1), s_tmp0, slope_s
+              write(iulog,*) 'qt_cldtop, qt_old, qt_new, qt_slope', qt_off(i,k), qt_off(i, k-1), qt_tmp0, slope_qt
+            endif 
 
-            if (slope_qt <= 0. .and. qt_tmp0 < s_off(i,k-1) ) then
-              q_off(i, k-1, 1) = qt_tmp0
+            !--- make sure the slope and value 
+            if (      slope_s  >= 0. .and. s_tmp0  > s_off(i,k) &
+                .and. slope_qt <= 0. .and. qt_tmp0 < qt_off(i,k) ) then
+              s_off(i, k-1) = s_tmp0
+              q_off(i, k-1, 1) = qt_tmp0 - q_off(i,k-1,ixcldliq) - q_off(i,k-1,ixcldice)
+              if (do_print_out) write(iulog,*) "replace cloud top s and q, yaya"
             endif
 
           endif  ! end if, k_cldtop
@@ -2157,6 +2168,11 @@ contains
       slv_pre_PBL_off(:ncol,:pver) = sl_pre_PBL_off(:ncol,:pver) * ( 1._r8 + zvir*qt_pre_PBL_off(:ncol,:pver) )
 
       t_pre_PBL_off(:ncol,:pver) = ( s_off(:ncol,:) - gravit * state%zm(:ncol,:) ) / cpair
+      
+      if (do_print_out) then  
+        write(iulog,*) 'sl_pre_PBL_off',sl_pre_PBL_off
+        write(iulog,*) 'qt_pre_PBL_off',qt_pre_PBL_off
+      endif
 
       call outfld( 'qt_pre_PBL_off   ', qt_pre_PBL_off,                 pcols, lchnk )
       call outfld( 'sl_pre_PBL_off   ', sl_pre_PBL_off,                 pcols, lchnk )
