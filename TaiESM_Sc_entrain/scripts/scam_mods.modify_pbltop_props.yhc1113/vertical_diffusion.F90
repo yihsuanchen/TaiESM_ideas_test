@@ -607,6 +607,16 @@ contains
     call addfld('qi_aft_PBL_off  ', 'kg/kg'  , pver, 'A', 'qi_aft_PBL_off',  phys_decomp)
     call addfld('t_aft_PBL_off   ', 'K'      , pver, 'A', 't_aft_PBL_off',   phys_decomp)
     call addfld('rh_aft_PBL_off  ', '%'      , pver, 'A', 'rh_aft_PBL_off',  phys_decomp)
+
+    call addfld( 'qtten_PBL_off   ', 'kg/kg/s', pver   , 'A', 'qt tendency by PBL_off'                                , phys_decomp )
+    call addfld( 'slten_PBL_off   ', 'J/kg/s' , pver   , 'A', 'sl tendency by PBL_off'                                , phys_decomp )
+    call addfld( 'uten_PBL_off    ', 'm/s2'   , pver   , 'A', 'u tendency by PBL_off'                                 , phys_decomp )
+    call addfld( 'vten_PBL_off    ', 'm/s2'   , pver   , 'A', 'v tendency by PBL_off'                                 , phys_decomp )
+    call addfld( 'qvten_PBL_off   ', 'kg/kg/s', pver   , 'A', 'qv tendency by PBL_off'                                , phys_decomp )
+    call addfld( 'qlten_PBL_off   ', 'kg/kg/s', pver   , 'A', 'ql tendency by PBL_off'                                , phys_decomp )
+    call addfld( 'qiten_PBL_off   ', 'kg/kg/s', pver   , 'A', 'qi tendency by PBL_off'                                , phys_decomp )
+    call addfld( 'tten_PBL_off    ', 'K/s'    , pver   , 'A', 'T tendency by PBL_off'                                 , phys_decomp )
+    call addfld( 'rhten_PBL_off   ', '%/s'    , pver   , 'A', 'RH tendency by PBL_off'                                , phys_decomp )
     !---> yhc1113
  
     ! ----------------------------
@@ -1400,10 +1410,15 @@ contains
     ! Diagnostics and output writing after applying PBL scheme !
     ! -------------------------------------------------------- !
 
-    ! yhc1113
-    write(iulog,*) 's_tmp - s_off',s_tmp-s_off
-    write(iulog,*) 'qv_tmp - qv_off',q_tmp(:,:,1)-q_off(:,:,1)
-    ! yhc1113
+    !<--- yhc1113, compute offline vertical diffusion tendencies
+    call compute_tend_vdiff_offline(lchnk, state, ncol, ztodt, rztodt,                        &
+                               s_tmp, u_tmp, v_tmp, q_tmp,                        &
+                               sl_prePBL, qt_prePBL, ftem_prePBL,                      &
+                               eddy_scheme, do_pseudocon_diff,                    &
+                               qmin, &
+                               diff_cnsrv_mass_check, cflx                       &
+                               )
+    !---> yhc1113
 
     sl(:ncol,:pver)  = s_tmp(:ncol,:) -   latvap           * q_tmp(:ncol,:,ixcldliq) &
                                       - ( latvap + latice) * q_tmp(:ncol,:,ixcldice)
@@ -2284,6 +2299,256 @@ contains
   
   end subroutine get_inputs_vdiff_offline
   !---> yhc1113, 
+
+subroutine compute_tend_vdiff_offline(lchnk, state, ncol, ztodt, rztodt,                        &
+                             s_tmp, u_tmp, v_tmp, q_tmp,                        &
+                             sl_prePBL, qt_prePBL, ftem_prePBL,                      &
+                             eddy_scheme, do_pseudocon_diff,                    &
+                             qmin, &
+                             diff_cnsrv_mass_check, cflx                       &
+                             )
+
+   use physics_types,      only : physics_state, physics_ptend, physics_ptend_init
+   use time_manager,       only : get_nstep
+   use constituents,       only : cnst_get_type_byind, cnst_name, cnst_fixed_ubc, cnst_fixed_ubflx
+   use wv_saturation,      only : qsat
+   use cam_history,        only : outfld
+   use physconst,          only :          &
+                               pi,      &
+                               cpair  , &     ! Specific heat of dry air
+                               gravit , &     ! Acceleration due to gravity
+                               rair   , &     ! Gas constant for dry air
+                               zvir   , &     ! rh2o/rair - 1
+                               latvap , &     ! Latent heat of vaporization
+                               latice , &     ! Latent heat of fusion
+                               karman , &     ! von Karman constant
+                               mwdry  , &     ! Molecular weight of dry air
+                               avogad , &     ! Avogadro's number
+                               boltz  , &     ! Boltzman's constant
+                               tms_orocnst,&  ! turbulent mountain stress parameter
+                               tms_z0fac      ! Factor determining z_0 from orographic standard deviation [no unit]
+
+   implicit none
+
+   !--------------------------------------------------------------------
+   ! Arguments
+   !--------------------------------------------------------------------
+   integer,               intent(in)    :: lchnk
+   integer,               intent(in)    :: ncol
+   real(r8),              intent(in)    :: ztodt, rztodt
+   type(physics_state),   intent(in)    :: state
+
+   ! prognostic (or intermediate) fields before vertical diffusion
+   real(r8), intent(in) :: s_tmp (pcols,pver)
+   real(r8), intent(in) :: u_tmp (pcols,pver)
+   real(r8), intent(in) :: v_tmp (pcols,pver)
+   real(r8), intent(in) :: q_tmp (pcols,pver,pcnst)
+
+   ! pseudo-conservative variables (before and after PBL)
+   real(r8), intent(in)  :: sl_prePBL (pcols,pver)
+   real(r8), intent(in)  :: qt_prePBL (pcols,pver)
+   real(r8), intent(in)  :: ftem_prePBL(pcols,pver)
+
+   ! configuration / constants
+   character(len=*), intent(in) :: eddy_scheme
+   logical,          intent(in) :: do_pseudocon_diff
+   real(r8),         intent(in) :: qmin(pcnst)
+   logical,          intent(in) :: diff_cnsrv_mass_check
+   real(r8),         intent(in) :: cflx(pcols,pcnst)
+
+   !--------------------------------------------------------------------
+   ! Local variables
+   !--------------------------------------------------------------------
+   type(physics_ptend) :: ptend_off
+
+   logical  :: lq(pcnst)
+   real(r8) :: qv_pro (pcols,pver)
+   real(r8) :: ql_pro (pcols,pver)
+   real(r8) :: qi_pro (pcols,pver)
+   real(r8) :: s_pro  (pcols,pver)
+   real(r8) :: t_pro  (pcols,pver)
+   real(r8) :: tem2   (pcols,pver)
+   real(r8) :: ftem   (pcols,pver)
+   real(r8) :: sl     (pcols,pver)
+   real(r8) :: slv    (pcols,pver)
+   real(r8) :: qt     (pcols,pver)
+
+   real(r8) :: slten  (pcols,pver)
+   real(r8) :: qtten  (pcols,pver)
+   real(r8) :: qv_aft_PBL (pcols,pver)
+   real(r8) :: ql_aft_PBL (pcols,pver)
+   real(r8) :: qi_aft_PBL (pcols,pver)
+   real(r8) :: s_aft_PBL  (pcols,pver)
+   real(r8) :: t_aftPBL   (pcols,pver)
+   real(r8) :: u_aft_PBL  (pcols,pver)
+   real(r8) :: v_aft_PBL  (pcols,pver)
+   real(r8) :: ftem_aftPBL(pcols,pver)
+   real(r8) :: tten  (pcols,pver)
+   real(r8) :: rhten (pcols,pver)
+
+   integer  :: i, k, m, nstep
+   real(r8) :: pdelx, sum1, sum2, sum3, sflx
+
+   ! -------------------------------------------------------- !
+   ! Diagnostics and output writing after applying PBL scheme !
+   ! -------------------------------------------------------- !
+
+   sl(:ncol,:pver)  = s_tmp(:ncol,:) -   latvap           * q_tmp(:ncol,:,ixcldliq) &
+                                     - ( latvap + latice) * q_tmp(:ncol,:,ixcldice)
+   qt(:ncol,:pver)  = q_tmp(:ncol,:,1) + q_tmp(:ncol,:,ixcldliq) &
+                                   + q_tmp(:ncol,:,ixcldice)
+   slv(:ncol,:pver) = sl(:ncol,:pver) * ( 1._r8 + zvir*qt(:ncol,:pver) )
+
+   !--------------------------------------------------------------!
+   ! Initialize ptend structure for vertical diffusion            !
+   !--------------------------------------------------------------!
+
+   lq(:) = .TRUE.
+   call physics_ptend_init(ptend_off, state%psetcols, "vertical diffusion", &
+                           ls=.true., lu=.true., lv=.true., lq=lq)
+
+   ptend_off%s(:ncol,:)       = ( s_tmp(:ncol,:)        - state%s(:ncol,:)        ) * rztodt
+   ptend_off%u(:ncol,:)       = ( u_tmp(:ncol,:)        - state%u(:ncol,:)        ) * rztodt
+   ptend_off%v(:ncol,:)       = ( v_tmp(:ncol,:)        - state%v(:ncol,:)        ) * rztodt
+   ptend_off%q(:ncol,:pver,:) = ( q_tmp(:ncol,:pver,:)  - state%q(:ncol,:pver,:)  ) * rztodt
+
+   slten(:ncol,:)         = ( sl(:ncol,:)           - sl_prePBL(:ncol,:)      ) * rztodt
+   qtten(:ncol,:)         = ( qt(:ncol,:)           - qt_prePBL(:ncol,:)      ) * rztodt
+
+   ! ----------------------------------------------------------- !
+   ! Pseudo-conservative variable diffusion (optional)           !
+   ! ----------------------------------------------------------- !
+
+   if (eddy_scheme .eq. 'diag_TKE' .and. do_pseudocon_diff) then
+
+      ptend_off%q(:ncol,:pver,1)          = qtten(:ncol,:pver)
+      ptend_off%s(:ncol,:pver)            = slten(:ncol,:pver)
+      ptend_off%q(:ncol,:pver,ixcldliq)   = 0._r8
+      ptend_off%q(:ncol,:pver,ixcldice)   = 0._r8
+      ptend_off%q(:ncol,:pver,ixnumliq)   = 0._r8
+      ptend_off%q(:ncol,:pver,ixnumice)   = 0._r8
+
+      do i = 1, ncol
+         do k = 1, pver
+            qv_pro(i,k) = state%q(i,k,1)        + ptend_off%q(i,k,1)             * ztodt
+            ql_pro(i,k) = state%q(i,k,ixcldliq) + ptend_off%q(i,k,ixcldliq)      * ztodt
+            qi_pro(i,k) = state%q(i,k,ixcldice) + ptend_off%q(i,k,ixcldice)      * ztodt
+            s_pro(i,k)  = state%s(i,k)          + ptend_off%s(i,k)               * ztodt
+            t_pro(i,k)  = state%t(i,k)          + (1._r8/cpair)*ptend_off%s(i,k) * ztodt
+         end do
+      end do
+
+      call positive_moisture( cpair, latvap, latvap+latice, ncol, pver, ztodt, &
+                              qmin(1), qmin(ixcldliq), qmin(ixcldice),         &
+                              state%pdel(:ncol,pver:1:-1),                     &
+                              qv_pro(:ncol,pver:1:-1), ql_pro(:ncol,pver:1:-1),&
+                              qi_pro(:ncol,pver:1:-1), t_pro(:ncol,pver:1:-1), &
+                              s_pro(:ncol,pver:1:-1),                           &
+                              ptend_off%q(:ncol,pver:1:-1,1),                       &
+                              ptend_off%q(:ncol,pver:1:-1,ixcldliq),                &
+                              ptend_off%q(:ncol,pver:1:-1,ixcldice),                &
+                              ptend_off%s(:ncol,pver:1:-1) )
+
+   end if
+
+   ! ----------------------------------------------------------------- !
+   ! Re-calculate diagnostic output variables after vertical diffusion !
+   ! ----------------------------------------------------------------- !
+
+   qv_aft_PBL(:ncol,:pver) = state%q(:ncol,:pver,1)        + ptend_off%q(:ncol,:pver,1)        * ztodt
+   ql_aft_PBL(:ncol,:pver) = state%q(:ncol,:pver,ixcldliq) + ptend_off%q(:ncol,:pver,ixcldliq) * ztodt
+   qi_aft_PBL(:ncol,:pver) = state%q(:ncol,:pver,ixcldice) + ptend_off%q(:ncol,:pver,ixcldice) * ztodt
+   s_aft_PBL(:ncol,:pver)  = state%s(:ncol,:pver)          + ptend_off%s(:ncol,:pver)          * ztodt
+   t_aftPBL(:ncol,:pver)   = ( s_aft_PBL(:ncol,:pver) - gravit*state%zm(:ncol,:pver) ) / cpair
+
+   u_aft_PBL(:ncol,:pver)  = state%u(:ncol,:pver) + ptend_off%u(:ncol,:pver) * ztodt
+   v_aft_PBL(:ncol,:pver)  = state%v(:ncol,:pver) + ptend_off%v(:ncol,:pver) * ztodt
+
+   call qsat(t_aftPBL(:ncol,:pver), state%pmid(:ncol,:pver), &
+             tem2(:ncol,:pver), ftem(:ncol,:pver))
+
+   ftem_aftPBL(:ncol,:pver) = qv_aft_PBL(:ncol,:pver) / ftem(:ncol,:pver) * 100._r8
+
+   tten(:ncol,:pver)  = ( t_aftPBL(:ncol,:pver)    - state%t(:ncol,:pver) )     * rztodt
+   rhten(:ncol,:pver) = ( ftem_aftPBL(:ncol,:pver) - ftem_prePBL(:ncol,:pver) ) * rztodt
+
+   ! -------------------------------------------------------------- !
+   ! mass conservation check.........
+   ! -------------------------------------------------------------- !
+   if (diff_cnsrv_mass_check) then
+
+      nstep = get_nstep()
+
+      do m = 1, pcnst
+         fixed_ubc: if ((.not. cnst_fixed_ubc(m)) .and. (.not. cnst_fixed_ubflx(m))) then
+            col_loop: do i = 1, ncol
+               sum1 = 0._r8
+               sum2 = 0._r8
+               sum3 = 0._r8
+               do k = 1, pver
+                  if (cnst_get_type_byind(m) .eq. 'wet') then
+                     pdelx = state%pdel(i,k)
+                  else
+                     pdelx = state%pdeldry(i,k)
+                  endif
+                  sum1 = sum1 + state%q(i,k,m)                    * pdelx / gravit   ! total column
+                  sum2 = sum2 + (state%q(i,k,m) + ptend_off%q(i,k,m)*ztodt) * pdelx / gravit
+                  sum3 = sum3 + (                 ptend_off%q(i,k,m)*ztodt) * pdelx / gravit
+               enddo
+
+               sum1 = sum1 + (cflx(i,m) * ztodt)  ! add in surface flux (kg/m2)
+               sflx = (cflx(i,m) * ztodt)
+
+               if (sum1 > 1.e-30_r8) then
+                  if (abs((sum2-sum1)/sum1) .gt. 1.e-12_r8) then
+                     write(iulog,'(a,a8,a,I4,2f8.3,5e25.16)')       &
+                          'MASSCHECK vert diff : nstep,lon,lat,mass1,mass2,sum3,sflx,rel-diff : ', &
+                          trim(cnst_name(m)), ' : ', nstep,         &
+                          state%lon(i)*180._r8/pi, state%lat(i)*180._r8/pi, &
+                          sum1, sum2, sum3, sflx, abs(sum2-sum1)/sum1
+                     call endrun('vertical_diffusion_tend : mass not conserved')
+                  endif
+               endif
+            enddo col_loop
+         endif fixed_ubc
+      enddo
+   endif
+
+
+   !-----------------------------!
+   !  Write offline diags      !
+   !-----------------------------!
+    call outfld( 'sl_aft_PBL_off'   , sl,                        pcols, lchnk )
+    call outfld( 'qt_aft_PBL_off'   , qt,                        pcols, lchnk )
+    call outfld( 'slv_aft_PBL_off'  , slv,                       pcols, lchnk )
+    call outfld( 'u_aft_PBL_off'    , u_aft_PBL,                 pcols, lchnk )
+    call outfld( 'v_aft_PBL_off'    , v_aft_PBL,                 pcols, lchnk )
+    call outfld( 'qv_aft_PBL_off'   , qv_aft_PBL,                pcols, lchnk )
+    call outfld( 'ql_aft_PBL_off'   , ql_aft_PBL,                pcols, lchnk )
+    call outfld( 'qi_aft_PBL_off'   , qi_aft_PBL,                pcols, lchnk )
+    call outfld( 't_aft_PBL_off '   , t_aftPBL,                  pcols, lchnk )
+    call outfld( 'rh_aft_PBL_off'   , ftem_aftPBL,               pcols, lchnk )
+    !call outfld( 'slflx_PBL_off'    , slflx,                     pcols, lchnk )
+    !call outfld( 'qtflx_PBL_off'    , qtflx,                     pcols, lchnk )
+    !call outfld( 'uflx_PBL_off'     , uflx,                      pcols, lchnk )
+    !call outfld( 'vflx_PBL_off'     , vflx,                      pcols, lchnk )
+    !call outfld( 'slflx_cg_PBL_off' , slflx_cg,                  pcols, lchnk )
+    !call outfld( 'qtflx_cg_PBL_off' , qtflx_cg,                  pcols, lchnk )
+    !call outfld( 'uflx_cg_PBL_off'  , uflx_cg,                   pcols, lchnk )
+    !call outfld( 'vflx_cg_PBL_off'  , vflx_cg,                   pcols, lchnk )
+    call outfld( 'slten_PBL_off'    , slten,                     pcols, lchnk )
+    call outfld( 'qtten_PBL_off'    , qtten,                     pcols, lchnk )
+    call outfld( 'uten_PBL_off'     , ptend_off%u(:ncol,:),          pcols, lchnk )
+    call outfld( 'vten_PBL_off'     , ptend_off%v(:ncol,:),          pcols, lchnk )
+    call outfld( 'qvten_PBL_off'    , ptend_off%q(:ncol,:,1),        pcols, lchnk )
+    call outfld( 'qlten_PBL_off'    , ptend_off%q(:ncol,:,ixcldliq), pcols, lchnk )
+    call outfld( 'qiten_PBL_off'    , ptend_off%q(:ncol,:,ixcldice), pcols, lchnk )
+    call outfld( 'tten_PBL_off'     , tten,                      pcols, lchnk )
+    call outfld( 'rhten_PBL_off'    , rhten,                     pcols, lchnk )
+
+
+end subroutine compute_tend_vdiff_offline
+
 
 
 end module vertical_diffusion
