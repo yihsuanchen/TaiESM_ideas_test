@@ -596,6 +596,7 @@ contains
     call addfld( 'ql_pre_PBL_off   ', 'kg/kg' , pver, 'A', 'ql_prePBL_off'  , phys_decomp )
     call addfld( 'qi_pre_PBL_off   ', 'kg/kg' , pver, 'A', 'qi_prePBL_off'  , phys_decomp )
     call addfld( 't_pre_PBL_off    ', 'K'     , pver, 'A', 't_prePBL_off'   , phys_decomp )
+    call addfld( 'rh_pre_PBL_off  ', '%'      , pver   , 'A', 'rh_prePBL_off', phys_decomp )
 
     call addfld('sl_aft_PBL_off  ', 'J/kg'   , pver, 'A', 'sl_aft_PBL_off',  phys_decomp)
     call addfld('qt_aft_PBL_off  ', 'kg/kg'  , pver, 'A', 'qt_aft_PBL_off',  phys_decomp)
@@ -928,6 +929,11 @@ contains
     real(r8) :: u_off(pcols,pver)
     real(r8) :: v_off(pcols,pver)
     real(r8) :: q_off(pcols,pver,pcnst)
+    real(r8) :: sl_pre_PBL_off(pcols,pver)
+    real(r8) :: qt_pre_PBL_off(pcols,pver)
+    real(r8) :: ftem_pre_PBL_off(pcols,pver)
+    real(r8) :: tauresx_off(pcols)
+    real(r8) :: tauresy_off(pcols)
     !---> yhc1113
 
     ! ----------------------- !
@@ -1209,9 +1215,6 @@ contains
          tem2(:ncol,:), ftem(:ncol,:))
     ftem_prePBL(:ncol,:) = state%q(:ncol,:,1)/ftem(:ncol,:)*100._r8
 
-    write(iulog,*) 'qt_pre_PBL     = ', qt_prePBL
-    write(iulog,*) 'sl_pre_PBL     = ', sl_prePBL
-
     call outfld( 'qt_pre_PBL   ', qt_prePBL,                 pcols, lchnk )
     call outfld( 'sl_pre_PBL   ', sl_prePBL,                 pcols, lchnk )
     call outfld( 'slv_pre_PBL  ', slv_prePBL,                pcols, lchnk )
@@ -1225,7 +1228,9 @@ contains
 
     !<--- yhc1113
     call get_inputs_vdiff_offline ( lchnk, state, ncol, kvh,         &
-                                    do_modify_cldtop_props, s_off, q_off, u_off, v_off)
+                                    do_modify_cldtop_props, s_off, q_off, u_off, v_off, &
+                                    sl_pre_PBL_off, qt_pre_PBL_off, ftem_pre_PBL_off &
+                                  ) 
     !---> yhc1113
 
     ! --------------------------------------------------------------------------------- !
@@ -1274,6 +1279,11 @@ contains
 
         case ( 'diag_TKE', 'HB','HBR' )
 
+        !<--- yhc1113, because tauresx and tauresy will be modified in compute_vdiff. Save the values for offline calculations
+        tauresx_off = tauresx
+        tauresy_off = tauresy
+        !---> yhc1113
+
         call compute_vdiff( state%lchnk   ,                                                                     &
                             pcols         , pver               , pcnst        , ncol          , state%pmid    , &
                             state%pint    , state%rpdel        , state%t      , ztodt         , taux          , &
@@ -1285,8 +1295,9 @@ contains
                             tauresx       , tauresy            , 1            , cpairv(:,:,state%lchnk), rairi, &
                             do_molec_diff , compute_molec_diff , vd_lu_qdecomp, kvt )
 
-        !<--- yhc1113, vdiff offline calculation. Note taht *_tmp is replaced with *_off
+        !<--- yhc1113, vdiff offline calculation. Note taht *_tmp & tauresx(y) is replaced with *_off
         if (do_modify_cldtop_props >= 0) then
+
           call compute_vdiff( state%lchnk   ,                                                                     &
                               pcols         , pver               , pcnst        , ncol          , state%pmid    , &
                               state%pint    , state%rpdel        , state%t      , ztodt         , taux          , &
@@ -1296,7 +1307,8 @@ contains
                               !u_tmp         , v_tmp              , q_tmp        , s_tmp         ,                 &
                               u_off         , v_off              , q_off        , s_off         ,                 &
                               tautmsx       , tautmsy            , dtk          , topflx        , errstring     , &
-                              tauresx       , tauresy            , 1            , cpairv(:,:,state%lchnk), rairi, &
+                              !tauresx       , tauresy            , 1            , cpairv(:,:,state%lchnk), rairi, &
+                              tauresx_off       , tauresy_off            , 1            , cpairv(:,:,state%lchnk), rairi, &
                               do_molec_diff , compute_molec_diff , vd_lu_qdecomp, kvt )
         endif
         !---> yhc1113, vdiff offline calculation
@@ -1347,7 +1359,12 @@ contains
              extra_msg="Error in fieldlist_dry call from vertical_diffusion.")
 
         case ( 'diag_TKE', 'HB','HBR' )
-                
+
+        !<--- yhc1113, because tauresx and tauresy will be modified in compute_vdiff. Save the values for offline calculations
+        tauresx_off = tauresx
+        tauresy_off = tauresy
+        !---> yhc1113        
+        
         call compute_vdiff( state%lchnk   ,                                                                     &
                             pcols         , pver               , pcnst        , ncol          , state%pmiddry , &
                             state%pintdry , state%rpdeldry     , state%t      , ztodt         , taux          , &       
@@ -1361,6 +1378,7 @@ contains
 
         !<--- yhc1113, vdiff offline calculation. Note taht *_tmp is replaced with *_off
         if (do_modify_cldtop_props >= 0) then
+
           call compute_vdiff( state%lchnk   ,                                                                     &
                               pcols         , pver               , pcnst        , ncol          , state%pmiddry , &
                               state%pintdry , state%rpdeldry     , state%t      , ztodt         , taux          , &       
@@ -1370,8 +1388,10 @@ contains
                               !u_tmp         , v_tmp              , q_tmp        , s_tmp         ,                 &
                               u_off         , v_off              , q_off        , s_off         ,                 &
                               tautmsx       , tautmsy            , dtk          , topflx        , errstring     , &
-                              tauresx       , tauresy            , 1            , cpairv(:,:,state%lchnk), rairi, &
+                              tauresx_off       , tauresy_off            , 1            , cpairv(:,:,state%lchnk), rairi, &
+                              !tauresx       , tauresy            , 1            , cpairv(:,:,state%lchnk), rairi, &
                               do_molec_diff , compute_molec_diff , vd_lu_qdecomp )
+
         endif
         !---> yhc1113, vdiff offline calculation.
 
@@ -1411,13 +1431,17 @@ contains
     ! -------------------------------------------------------- !
 
     !<--- yhc1113, compute offline vertical diffusion tendencies
-    call compute_tend_vdiff_offline(lchnk, state, ncol, ztodt, rztodt,                        &
-                               s_tmp, u_tmp, v_tmp, q_tmp,                        &
-                               sl_prePBL, qt_prePBL, ftem_prePBL,                      &
+    if (do_modify_cldtop_props >= 0) then
+      call compute_tend_vdiff_offline(lchnk, state, ncol, ztodt, rztodt,                        &
+                               s_off, u_off, v_off, q_off,                        &
+                               sl_pre_PBL_off, qt_pre_PBL_off, ftem_pre_PBL_off,                      &
+                               !s_tmp, u_tmp, v_tmp, q_tmp,                        &
+                               !sl_prePBL, qt_prePBL, ftem_prePBL,                      &
                                eddy_scheme, do_pseudocon_diff,                    &
                                qmin, &
                                diff_cnsrv_mass_check, cflx                       &
                                )
+    endif
     !---> yhc1113
 
     sl(:ncol,:pver)  = s_tmp(:ncol,:) -   latvap           * q_tmp(:ncol,:,ixcldliq) &
@@ -2161,10 +2185,13 @@ contains
 
   !<--- yhc1113, prepare input fields for vdiff offline calculations 
   subroutine get_inputs_vdiff_offline ( lchnk, state, ncol, kvh,         &
-                                        do_modify_cldtop_props, s_off, q_off, u_off, v_off)
+                                        do_modify_cldtop_props, s_off, q_off, u_off, v_off, &
+                                        sl_pre_PBL_off, qt_pre_PBL_off, ftem_pre_PBL_off    & 
+                                      )
 
     use physics_types,      only : physics_state, physics_ptend, physics_ptend_init
     use cam_history,        only : outfld
+    use wv_saturation,      only : qsat
   
     implicit none
   
@@ -2182,15 +2209,18 @@ contains
     real(r8), intent(out) :: q_off(pcols,pver,pcnst)
     real(r8), intent(out) :: u_off(pcols,pver)
     real(r8), intent(out) :: v_off(pcols,pver)
+
+    real(r8), intent(out) :: sl_pre_PBL_off(pcols,pver)
+    real(r8), intent(out) :: qt_pre_PBL_off(pcols,pver)
+    real(r8), intent(out) :: ftem_pre_PBL_off(pcols,pver)
   
     !--------------------------------------------------------------------
     ! Local variables
     !--------------------------------------------------------------------
-    real(r8) :: sl_pre_PBL_off(pcols,pver)
-    real(r8) :: qt_pre_PBL_off(pcols,pver)
     real(r8) :: slv_pre_PBL_off(pcols,pver)
     real(r8) :: t_pre_PBL_off(pcols,pver)
     real(r8) :: qt_off(pcols,pver)
+    real(r8) :: ftem(pcols,pver)                                    ! Saturation vapor pressure before PBL
 
     integer  :: i, k
     integer  :: k_cldtop(ncol)
@@ -2198,6 +2228,7 @@ contains
     real(r8) :: zmid(pver)
     real(r8) :: slope_s, slope_qt
     real(r8) :: s_tmp0, qt_tmp0
+    real(r8) :: tem2(pcols,pver)                                    ! Saturation specific humidity and RH
 
     real(r8), parameter :: ql_thresh  = 1.e-10_r8   ! kg/kg
     real(r8), parameter :: kvh_thresh = 1.e-10_r8   ! m2/s (avoid floating noise)
@@ -2285,6 +2316,10 @@ contains
     slv_pre_PBL_off(:ncol,:pver) = sl_pre_PBL_off(:ncol,:pver) * ( 1._r8 + zvir*qt_pre_PBL_off(:ncol,:pver) )
 
     t_pre_PBL_off(:ncol,:pver) = ( s_off(:ncol,:) - gravit * state%zm(:ncol,:) ) / cpair
+
+    call qsat(t_pre_PBL_off(:ncol,:), state%pmid(:ncol,:), &
+         tem2(:ncol,:), ftem(:ncol,:))
+    ftem_pre_PBL_off(:ncol,:) = state%q(:ncol,:,1)/ftem(:ncol,:)*100._r8
   
     !--- output
     call outfld( 'qt_pre_PBL_off   ', qt_pre_PBL_off,          pcols, lchnk )
@@ -2296,7 +2331,8 @@ contains
     call outfld( 'ql_pre_PBL_off   ', q_off(:ncol,:,ixcldliq), pcols, lchnk )
     call outfld( 'qi_pre_PBL_off   ', q_off(:ncol,:,ixcldice), pcols, lchnk )
     call outfld( 't_pre_PBL_off    ', t_pre_PBL_off,           pcols, lchnk )
-  
+    call outfld( 'rh_pre_PBL_off   ', ftem_pre_PBL_off,         pcols, lchnk )
+
   end subroutine get_inputs_vdiff_offline
   !---> yhc1113, 
 
@@ -2547,8 +2583,8 @@ subroutine compute_tend_vdiff_offline(lchnk, state, ncol, ztodt, rztodt,        
     call outfld( 'rhten_PBL_off'    , rhten,                     pcols, lchnk )
 
 
-end subroutine compute_tend_vdiff_offline
-
+  end subroutine compute_tend_vdiff_offline
+  !<--- yhc1113
 
 
 end module vertical_diffusion
