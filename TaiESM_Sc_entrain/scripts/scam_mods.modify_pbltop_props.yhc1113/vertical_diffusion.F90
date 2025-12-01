@@ -587,6 +587,17 @@ contains
     endif
 
     !<--- yhc1113, add output fields from compute_vdiff_offline
+    call addfld( 'qt_in_PBL_off  ', 'kg/kg'  , pver   , 'A', 'qt_in_PBL_off'                                         , phys_decomp )
+    call addfld( 'sl_in_PBL_off  ', 'J/kg'   , pver   , 'A', 'sl_in_PBL_off'                                         , phys_decomp )
+    call addfld( 'slv_in_PBL_off ', 'J/kg'   , pver   , 'A', 'slv_in_PBL_off'                                        , phys_decomp )
+    call addfld( 'u_in_PBL_off   ', 'm/s'    , pver   , 'A', 'u_in_PBL_off'                                          , phys_decomp )
+    call addfld( 'v_in_PBL_off   ', 'm/s'    , pver   , 'A', 'v_in_PBL_off'                                          , phys_decomp )
+    call addfld( 'qv_in_PBL_off  ', 'kg/kg'  , pver   , 'A', 'qv_in_PBL_off'                                         , phys_decomp )
+    call addfld( 'ql_in_PBL_off  ', 'kg/kg'  , pver   , 'A', 'ql_in_PBL_off'                                         , phys_decomp )
+    call addfld( 'qi_in_PBL_off  ', 'kg/kg'  , pver   , 'A', 'qi_in_PBL_off'                                         , phys_decomp )
+    call addfld( 't_in_PBL_off   ', 'K'      , pver   , 'A', 't_in_PBL_off'                                          , phys_decomp )
+    call addfld( 'rh_in_PBL_off  ', '%'      , pver   , 'A', 'rh_in_PBL_off'                                         , phys_decomp )
+
     call addfld( 'qt_pre_PBL_off   ', 'kg/kg' , pver, 'A', 'qt_pre_PBL_off'  , phys_decomp )
     call addfld( 'sl_pre_PBL_off   ', 'J/kg'  , pver, 'A', 'sl_pre_PBL_off'  , phys_decomp )
     call addfld( 'slv_pre_PBL_off  ', 'J/kg'  , pver, 'A', 'slv_prePBL_off' , phys_decomp )
@@ -921,14 +932,18 @@ contains
     logical  :: lq(pcnst)
 
     !<--- yhc1113, add an offline compute_vdiff so I so try to modify the T,q, etc. right above the cloud top 
-    integer, parameter :: do_modify_cldtop_props = 0
-    !integer, parameter :: do_modify_cldtop_props = 1
+    !integer, parameter :: do_modify_cldtop_props = 0
+    integer, parameter :: do_modify_cldtop_props = 1
 
     type(physics_ptend) :: ptend_off
     real(r8) :: s_off(pcols,pver)
     real(r8) :: u_off(pcols,pver)
     real(r8) :: v_off(pcols,pver)
     real(r8) :: q_off(pcols,pver,pcnst)
+    real(r8) :: s_offMstate(pcols,pver)
+    real(r8) :: u_offMstate(pcols,pver)
+    real(r8) :: v_offMstate(pcols,pver)
+    real(r8) :: q_offMstate(pcols,pver,pcnst)
     real(r8) :: sl_pre_PBL_off(pcols,pver)
     real(r8) :: qt_pre_PBL_off(pcols,pver)
     real(r8) :: ftem_pre_PBL_off(pcols,pver)
@@ -1229,6 +1244,7 @@ contains
     !<--- yhc1113
     call get_inputs_vdiff_offline ( lchnk, state, ncol, kvh,         &
                                     do_modify_cldtop_props, s_off, q_off, u_off, v_off, &
+                                    s_offMstate, q_offMstate, u_offMstate, v_offMstate, &
                                     sl_pre_PBL_off, qt_pre_PBL_off, ftem_pre_PBL_off &
                                   ) 
     !---> yhc1113
@@ -1432,9 +1448,15 @@ contains
 
     !<--- yhc1113, compute offline vertical diffusion tendencies
     if (do_modify_cldtop_props >= 0) then
+
+      !--- after_PBL state is pre_PBL plus changes in pre_PBL 
+      q_off(:ncol,:,:) = q_offMstate (:ncol,:,:) +  q_off(:ncol,:,:) 
+      s_off(:ncol,:)   = s_offMstate (:ncol,:)   +  s_off(:ncol,:)   
+      u_off(:ncol,:)   = u_offMstate (:ncol,:)   +  u_off(:ncol,:)   
+      v_off(:ncol,:)   = v_offMstate (:ncol,:)   +  v_off(:ncol,:)   
+ 
       call compute_tend_vdiff_offline(lchnk, state, ncol, ztodt, rztodt,                        &
                                s_off, u_off, v_off, q_off,                        &
-                               sl_pre_PBL_off, qt_pre_PBL_off, ftem_pre_PBL_off,                      &
                                !s_tmp, u_tmp, v_tmp, q_tmp,                        &
                                !sl_prePBL, qt_prePBL, ftem_prePBL,                      &
                                eddy_scheme, do_pseudocon_diff,                    &
@@ -2186,6 +2208,7 @@ contains
   !<--- yhc1113, prepare input fields for vdiff offline calculations 
   subroutine get_inputs_vdiff_offline ( lchnk, state, ncol, kvh,         &
                                         do_modify_cldtop_props, s_off, q_off, u_off, v_off, &
+                                        s_offMstate, q_offMstate, u_offMstate, v_offMstate, & 
                                         sl_pre_PBL_off, qt_pre_PBL_off, ftem_pre_PBL_off    & 
                                       )
 
@@ -2213,6 +2236,15 @@ contains
     real(r8), intent(out) :: sl_pre_PBL_off(pcols,pver)
     real(r8), intent(out) :: qt_pre_PBL_off(pcols,pver)
     real(r8), intent(out) :: ftem_pre_PBL_off(pcols,pver)
+
+    real(r8), intent(out) :: s_offMstate(pcols,pver)
+    real(r8), intent(out) :: q_offMstate(pcols,pver,pcnst)
+    real(r8), intent(out) :: u_offMstate(pcols,pver)
+    real(r8), intent(out) :: v_offMstate(pcols,pver)
+
+    real(r8) :: sl_pre_PBL_offMstate(pcols,pver)
+    real(r8) :: qt_pre_PBL_offMstate(pcols,pver)
+    real(r8) :: ftem_pre_PBL_offMstate(pcols,pver)
   
     !--------------------------------------------------------------------
     ! Local variables
@@ -2319,8 +2351,14 @@ contains
 
     call qsat(t_pre_PBL_off(:ncol,:), state%pmid(:ncol,:), &
          tem2(:ncol,:), ftem(:ncol,:))
-    ftem_pre_PBL_off(:ncol,:) = state%q(:ncol,:,1)/ftem(:ncol,:)*100._r8
+    ftem_pre_PBL_off(:ncol,:) = q_off(:ncol,:,1)/ftem(:ncol,:)*100._r8
   
+    !--- compute off minus state
+    q_offMstate (:ncol,:,:)  = q_off(:ncol,:,:) - state%q(:ncol,:,:)
+    s_offMstate (:ncol,:)    = s_off(:ncol,:)   - state%s(:ncol,:)
+    u_offMstate (:ncol,:)    = u_off(:ncol,:)   - state%u(:ncol,:)
+    v_offMstate (:ncol,:)    = v_off(:ncol,:)   - state%v(:ncol,:)
+
     !--- output
     call outfld( 'qt_pre_PBL_off   ', qt_pre_PBL_off,          pcols, lchnk )
     call outfld( 'sl_pre_PBL_off   ', sl_pre_PBL_off,          pcols, lchnk )
@@ -2338,7 +2376,6 @@ contains
 
 subroutine compute_tend_vdiff_offline(lchnk, state, ncol, ztodt, rztodt,                        &
                              s_tmp, u_tmp, v_tmp, q_tmp,                        &
-                             sl_prePBL, qt_prePBL, ftem_prePBL,                      &
                              eddy_scheme, do_pseudocon_diff,                    &
                              qmin, &
                              diff_cnsrv_mass_check, cflx                       &
@@ -2381,9 +2418,10 @@ subroutine compute_tend_vdiff_offline(lchnk, state, ncol, ztodt, rztodt,        
    real(r8), intent(in) :: q_tmp (pcols,pver,pcnst)
 
    ! pseudo-conservative variables (before and after PBL)
-   real(r8), intent(in)  :: sl_prePBL (pcols,pver)
-   real(r8), intent(in)  :: qt_prePBL (pcols,pver)
-   real(r8), intent(in)  :: ftem_prePBL(pcols,pver)
+   real(r8) :: sl_prePBL (pcols,pver)
+   real(r8) :: slv_prePBL (pcols,pver)
+   real(r8) :: qt_prePBL (pcols,pver)
+   real(r8) :: ftem_prePBL(pcols,pver)
 
    ! configuration / constants
    character(len=*), intent(in) :: eddy_scheme
@@ -2424,6 +2462,20 @@ subroutine compute_tend_vdiff_offline(lchnk, state, ncol, ztodt, rztodt,        
 
    integer  :: i, k, m, nstep
    real(r8) :: pdelx, sum1, sum2, sum3, sflx
+
+   ! -------------------------------------------------------- !
+   ! the original state !
+   ! -------------------------------------------------------- !
+
+   sl_prePBL(:ncol,:pver)  = state%s(:ncol,:) -   latvap * state%q(:ncol,:,ixcldliq) &
+                                              - ( latvap + latice) * state%q(:ncol,:,ixcldice)
+   qt_prePBL(:ncol,:pver)  = state%q(:ncol,:,1) + state%q(:ncol,:,ixcldliq) &
+                                                + state%q(:ncol,:,ixcldice)
+   slv_prePBL(:ncol,:pver) = sl_prePBL(:ncol,:pver) * ( 1._r8 + zvir*qt_prePBL(:ncol,:pver) )
+
+    call qsat(state%t(:ncol,:), state%pmid(:ncol,:), &
+         tem2(:ncol,:), ftem(:ncol,:))
+    ftem_prePBL(:ncol,:) = state%q(:ncol,:,1)/ftem(:ncol,:)*100._r8
 
    ! -------------------------------------------------------- !
    ! Diagnostics and output writing after applying PBL scheme !
