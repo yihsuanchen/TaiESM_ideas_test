@@ -932,6 +932,8 @@ contains
     logical  :: lq(pcnst)
 
     !<--- yhc1113, add an offline compute_vdiff so I so try to modify the T,q, etc. right above the cloud top 
+    !              do_modify_cldtop_props=0 : remain the same, do not do any changes
+    !              do_modify_cldtop_props=1 : extropolate from the free troposphere to the boundary layer top
     !integer, parameter :: do_modify_cldtop_props = 0
     integer, parameter :: do_modify_cldtop_props = 1
 
@@ -1801,409 +1803,410 @@ contains
 
   end subroutine positive_moisture
 
-  !<--- yhc1113, add do_offline_vdiff so I so try to modify the T,q, etc. right above the cloud top 
-   subroutine compute_vdiff_offline_old(      lchnk, ncol, ztodt, state,             &
-                                          taux, tauy, shflx, cflx,               &
-                                          ntop, nbot,                             &
-                                          kvh_in, kvm_in, kvq_in, cgs_in, cgh_in, &
-                                          zi, ksrftms, qmincg_in,                 &
-                                          u_in         , v_in              , q_in        , s_in, tauresx_in, tauresy_in,                 &
-                                          fieldlist_type, fieldlist_dry_in, fieldlist_wet_in, fieldlist_molec_in,   &
-                                          cpairv_in, rairi_in,                    &
-                                          do_molec_diff,                          &
-                                          ptend_off )
-
-      use physics_types,      only : physics_state, physics_ptend, physics_ptend_init
-      use molec_diff,         only : compute_molec_diff, vd_lu_qdecomp
-      use diffusion_solver,   only : compute_vdiff, any, operator(.not.)
-      use wv_saturation,      only : qsat
-      use cam_history,        only : outfld
-      use cam_logfile,      only : iulog
-      ! physics_state, physics_ptend are already in scope via host
-
-      implicit none
-
-      !-----------------------------!
-      ! Arguments from main routine !
-      !-----------------------------!
-      integer,             intent(in)  :: lchnk
-      integer,             intent(in)  :: ncol
-      real(r8),            intent(in)  :: ztodt
-      type(physics_state), intent(in)  :: state
-
-      real(r8), intent(in)            :: taux(pcols)
-      real(r8), intent(in)            :: tauy(pcols)
-      real(r8), intent(in)            :: shflx(pcols)
-      real(r8), intent(in)            :: cflx(pcols,pcnst)
-
-      integer,  intent(in)            :: ntop, nbot
-
-      real(r8), intent(in)            :: kvh_in(pcols,pver+1)
-      real(r8), intent(in)            :: kvm_in(pcols,pver+1)
-      real(r8), intent(in)            :: kvq_in(pcols,pver+1)
-      real(r8), intent(in)            :: cgs_in(pcols,pver+1)
-      real(r8), intent(in)            :: cgh_in(pcols,pver+1)
-
-      real(r8), intent(in)            :: zi(pcols,pver+1)
-      real(r8), intent(in)            :: ksrftms(pcols)
-      real(r8), intent(in)            :: qmincg_in(pcnst)
-
-      character(len=*),     intent(in) :: fieldlist_type
-      type(vdiff_selector), intent(in) :: fieldlist_dry_in
-      type(vdiff_selector), intent(in) :: fieldlist_wet_in
-      type(vdiff_selector), intent(in) :: fieldlist_molec_in
-      
-      real(r8), intent(in)            :: u_in(:,:)
-      real(r8), intent(in)            :: v_in(:,:)
-      real(r8), intent(in)            :: s_in(:,:)
-      real(r8), intent(in)            :: q_in(:,:,:)
-      real(r8), intent(in)            :: tauresx_in(pcols)
-      real(r8), intent(in)            :: tauresy_in(pcols)
-
-      real(r8), intent(in)            :: cpairv_in(pcols,pver)
-      real(r8), intent(in)            :: rairi_in(pcols,pver+1)
-
-      logical, intent(in)             :: do_molec_diff
-
-      type(physics_ptend), intent(out) :: ptend_off
-
-      !--------------------!
-      ! Local work arrays  !
-      !--------------------!
-
-      ! Offline state passed to compute_vdiff (intent(inout) in that routine)
-      real(r8) :: s_off(pcols,pver)
-      real(r8) :: u_off(pcols,pver)
-      real(r8) :: v_off(pcols,pver)
-      real(r8) :: q_off(pcols,pver,pcnst)
-
-      ! Local copies of in/out eddy / residual fields so online values are unchanged
-      real(r8) :: kvm_off(pcols,pver+1)
-      real(r8) :: kvq_off(pcols,pver+1)
-      real(r8) :: cgs_off(pcols,pver+1)
-      real(r8) :: cgh_off(pcols,pver+1)
-      real(r8) :: tauresx_off(pcols)
-      real(r8) :: tauresy_off(pcols)
-
-      ! Outputs from compute_vdiff (offline version)
-      real(r8) :: dtk_off(pcols,pver)
-      real(r8) :: tautmsx_off(pcols)
-      real(r8) :: tautmsy_off(pcols)
-      real(r8) :: topflx_off(pcols)
-      real(r8) :: kvt_off(pcols,pver+1)
-
-      character(128) :: errstring
-
-      ! Offline diagnostics (after-PBL)
-      real(r8) :: qv_off(pcols,pver)
-      real(r8) :: ql_off(pcols,pver)
-      real(r8) :: qi_off(pcols,pver)
-      real(r8) :: t_off(pcols,pver)
-      real(r8) :: rh_off(pcols,pver)
-      real(r8) :: sl_off(pcols,pver)
-      real(r8) :: qt_off(pcols,pver)
-      real(r8) :: slv_off(pcols,pver)
-
-      real(r8) :: t_pre_PBL_off(pcols,pver)
-      real(r8) :: sl_pre_PBL_off(pcols,pver)
-      real(r8) :: qt_pre_PBL_off(pcols,pver)
-      real(r8) :: slv_pre_PBL_off(pcols,pver)
-
-      logical :: lq(pcnst)
-      real(r8) :: rztodt
-
-      real(r8) :: ftem(pcols,pver)                                    ! Saturation vapor pressure before PBL
-      real(r8) :: tem2(pcols,pver)                                    ! Saturation specific humidity and RH
-
-      real(r8) :: zint(pver+1)   ! interface height (m)
-      real(r8) :: zmid(pver)     ! interface height (m)
-
-      real(r8) :: slope_s, slope_qt, s_tmp0, qt_tmp0
-      integer :: i,k
-
-      logical :: do_print_out = .true.
-      !logical :: do_print_out = .false.
-
-      integer, parameter :: do_modify_cldtop_props = 0  ! modify s & q of the layer just above the cloud layer
-                                                        ! 1: extropolate from the free troposphere
-      real(r8), parameter :: ql_thresh  = 1.e-10_r8   ! kg/kg
-      real(r8), parameter :: kvh_thresh = 1.e-10_r8   ! m2/s (avoid floating noise)
-      real(r8), parameter :: ratio_qq   = 1._r8       ! example blend weight (0-1), V_new = ratio_qq * V(k-1) + (1-ratio_qq) * V(k)
-      integer :: k_cldtop(pcols)
-
-!-----------------------------------
-      if (do_print_out) then
-        write(iulog,*) '----------------- compute_vdiff_offline INPUTS -----------------'
-        write(iulog,*) 'fieldlist_type        = ', fieldlist_type
-        write(iulog,*) 'lchnk                 = ', lchnk
-        write(iulog,*) 'ncol                  = ', ncol
-
-        if (trim(fieldlist_type) == "wet") then        
-          write(iulog,*) 'state%pmid            = ', state%pmid
-          write(iulog,*) 'state%pint            = ', state%pint
-          write(iulog,*) 'state%rpdel           = ', state%rpdel
-        elseif (trim(fieldlist_type) == "dry") then        
-          write(iulog,*) 'state%pmid            = ', state%pmiddry
-          write(iulog,*) 'state%pint            = ', state%pintdry
-          write(iulog,*) 'state%rpdel           = ', state%rpdeldry
-        endif
-
-        write(iulog,*) 'state%t               = ', state%t
-        write(iulog,*) 'ztodt                 = ', ztodt
-        write(iulog,*) 'taux                  = ', taux
-        write(iulog,*) 'tauy                  = ', tauy
-        write(iulog,*) 'shflx                 = ', shflx
-        write(iulog,*) 'cflx                  = ', cflx
-        write(iulog,*) 'ntop                  = ', ntop
-        write(iulog,*) 'nbot                  = ', nbot
-        write(iulog,*) 'kvh_in                = ', kvh_in
-        write(iulog,*) 'kvm_in                = ', kvm_in
-        write(iulog,*) 'kvq_in                = ', kvq_in
-        write(iulog,*) 'cgs_in                = ', cgs_in
-        write(iulog,*) 'cgh_in                = ', cgh_in
-        write(iulog,*) 'state%zi              = ', zi
-        write(iulog,*) 'ksrftms               = ', ksrftms
-        write(iulog,*) 'qmincg_in             = ', qmincg_in
-        write(iulog,*) 'state%qv              = ', state%q(:,:,1)
-        write(iulog,*) 'qv_in                 = ', q_in(:,:,1)
-        write(iulog,*) 'state%u               = ', state%u
-        write(iulog,*) 'u_in                  = ', u_in
-        write(iulog,*) 'state%v               = ', state%v
-        write(iulog,*) 'v_in                  = ', v_in
-        write(iulog,*) 'state%s               = ', state%s
-        write(iulog,*) 's_in                  = ', s_in
-        
-        write(iulog,*) 'fieldlist_in          = [derived type; contents not printed]'
-        write(iulog,*) 'fieldlist_molec_in    = [derived type; contents not printed]'
-        
-        write(iulog,*) 'tauresx_in             = ', tauresx_in
-        write(iulog,*) 'tauresy_in             = ', tauresy_in
-        write(iulog,*) 'cpairv_in             = ', cpairv_in
-        write(iulog,*) 'rairi_in              = ', rairi_in
-        
-        write(iulog,*) 'do_molec_diff         = ', do_molec_diff
-        
-      endif
-
-      !-----------------------------!
-      ! 1. Copy state to offline    !
-      !-----------------------------!
-      !q_off(:ncol,:,:) = state%q(:ncol,:,:)
-      !s_off(:ncol,:)   = state%s(:ncol,:)
-      !u_off(:ncol,:)   = state%u(:ncol,:)
-      !v_off(:ncol,:)   = state%v(:ncol,:)
-
-      q_off(:ncol,:,:) = q_in(:ncol,:,:)
-      s_off(:ncol,:)   = s_in(:ncol,:)
-      u_off(:ncol,:)   = u_in(:ncol,:)
-      v_off(:ncol,:)   = v_in(:ncol,:)
-
-      ! Copy eddy / residual fields so we don't touch online ones
-      kvm_off(:,:)     = kvm_in(:,:)
-      kvq_off(:,:)     = kvq_in(:,:)
-      cgs_off(:,:)     = cgs_in(:,:)
-      cgh_off(:,:)     = cgh_in(:,:)
-      tauresx_off(:)   = tauresx_in(:)
-      tauresy_off(:)   = tauresy_in(:)
-
-      !-----------------------------!
-      ! 2. Place for experiment     !
-      !    (modify *_off here)      !
-      !-----------------------------!
-      ! e.g.:
-      ! s_off(:ncol,:) = s_off(:ncol,:) + 0.5_r8
-      !q_off(:ncol,:,1) = q_off(:ncol,:,1) + 1.e-3_r8
-      
-      qt_off(:ncol,:pver)  = q_off(:ncol,:,1) + q_off(:ncol,:,ixcldliq) &
-                                              + q_off(:ncol,:,ixcldice)
-
-      do i = 1, ncol
-        !--- get altitudes at interface and midpoints
-        zint(:) = state%zi(i,:)
-        do k=1,pver
-          zmid(k) = 0.5_r8 * (zint(k) + zint(k+1))
-        enddo
-        !write(iulog,*) 'zmid             = ', zmid
-
-        !--- find the vertical index of the cloud layer  
-        k_cldtop(:) = 0   ! 0 => no (mixing-active) cloud found in the column
-        do k = 1, pver                       ! scan from model TOP downwards
-          if ( state%q(i,k,ixcldliq) > ql_thresh ) then
-            ! mixing-active if either adjacent interface has non-trivial kvh
-            if ( kvh_in(i,k) > kvh_thresh  ) then
-              k_cldtop(i) = k
-              exit
-            end if
-          end if
-        end do    ! end k loop
-      end do      ! end i loop
-
-      !---
-      if (do_modify_cldtop_props .eq. 1) then
-        do i = 1, ncol
-        
-          if (k_cldtop(i) > 0) then    
-            !--- linear extrapolation to compute s and qt at the cloud top
-            k = k_cldtop(i) 
-            slope_s = (s_off(i,k-2) - s_off(i,k-1)) / (zmid(k-2) - zmid(k-1))
-            s_tmp0  = s_off(i, k-1) - slope_s*(zmid(k-1) - zint(k))
-
-            slope_qt = (qt_off(i,k-2) - qt_off(i,k-1)) / (zmid(k-2) - zmid(k-1))
-            qt_tmp0  = qt_off(i, k-1) - slope_qt*(zmid(k-1) - zint(k))
-
-            if (do_print_out) then  
-              write(iulog,*) 'fieldlist_type', fieldlist_type
-              write(iulog,*) 'k_cldtop, zmid', k, zmid(k)
-              write(iulog,*) 'zmid', zmid
-              write(iulog,*) 'cldliq', state%q(i,:,ixcldliq)
-              write(iulog,*) 's_cldtop, s_old, s_new, s_slope', s_off(i,k), s_off(i, k-1), s_tmp0, slope_s
-              write(iulog,*) 'qt_cldtop, qt_old, qt_new, qt_slope', qt_off(i,k), qt_off(i, k-1), qt_tmp0, slope_qt
-            endif 
-
-            !--- make sure the slope and value 
-            if (      slope_s  >= 0. .and. s_tmp0  > s_off(i,k) &
-                .and. slope_qt <= 0. .and. qt_tmp0 < qt_off(i,k) ) then
-              s_off(i, k-1) = s_tmp0
-              q_off(i, k-1, 1) = qt_tmp0 - q_off(i,k-1,ixcldliq) - q_off(i,k-1,ixcldice)
-              if (do_print_out) write(iulog,*) "replace cloud top s and q, yaya"
-            endif
-
-          endif  ! end if, k_cldtop
-        enddo    ! end i loop      
-      endif      ! end if, do_modify_cldtop_props=1
-
-      sl_pre_PBL_off(:ncol,:pver)  = s_off(:ncol,:) -   latvap * q_off(:ncol,:,ixcldliq) &
-                                             - ( latvap + latice) * q_off(:ncol,:,ixcldice)
-      qt_pre_PBL_off(:ncol,:pver)  = q_off(:ncol,:,1) + q_off(:ncol,:,ixcldliq) &
-                                               + q_off(:ncol,:,ixcldice)
-      slv_pre_PBL_off(:ncol,:pver) = sl_pre_PBL_off(:ncol,:pver) * ( 1._r8 + zvir*qt_pre_PBL_off(:ncol,:pver) )
-
-      t_pre_PBL_off(:ncol,:pver) = ( s_off(:ncol,:) - gravit * state%zm(:ncol,:) ) / cpair
-      
-      if (do_print_out) then  
-        write(iulog,*) 'sl_pre_PBL_off',sl_pre_PBL_off
-        write(iulog,*) 'qt_pre_PBL_off',qt_pre_PBL_off
-      endif
-
-      call outfld( 'qt_pre_PBL_off   ', qt_pre_PBL_off,                 pcols, lchnk )
-      call outfld( 'sl_pre_PBL_off   ', sl_pre_PBL_off,                 pcols, lchnk )
-      call outfld( 'slv_pre_PBL_off  ', slv_pre_PBL_off,                pcols, lchnk )
-      call outfld( 'u_pre_PBL_off    ', u_off,                   pcols, lchnk )
-      call outfld( 'v_pre_PBL_off    ', v_off,                   pcols, lchnk )
-      call outfld( 'qv_pre_PBL_off   ', q_off(:ncol,:,1),        pcols, lchnk )
-      call outfld( 'ql_pre_PBL_off   ', q_off(:ncol,:,ixcldliq), pcols, lchnk )
-      call outfld( 'qi_pre_PBL_off   ', q_off(:ncol,:,ixcldice), pcols, lchnk )
-      call outfld( 't_pre_PBL_off    ', t_pre_PBL_off,                   pcols, lchnk )      
-
-      !-----------------------------!
-      ! 3. Offline compute_vdiff    !
-      !-----------------------------!
-      tautmsx_off(:) = 0._r8
-      tautmsy_off(:) = 0._r8
-      dtk_off(:,:)   = 0._r8
-      topflx_off(:)  = 0._r8
-      kvt_off(:,:)   = 0._r8
-      errstring      = ' '
-
-      if (trim(fieldlist_type) == "wet") then
-          call compute_vdiff( lchnk   ,                                                                     &
-                          pcols         , pver               , pcnst        , ncol          , state%pmid    , &
-                          state%pint    , state%rpdel        , state%t      , ztodt         , taux          , &
-                          tauy          , shflx              , cflx         , ntop          , nbot          , &
-                          kvh_in        , kvm_off            , kvq_off      , cgs_off       , cgh_off       , &
-                          zi      , ksrftms            , qmincg_in    , fieldlist_wet_in, fieldlist_molec_in, &
-                          u_off         , v_off              , q_off        , s_off         ,                 &
-                          tautmsx_off   , tautmsy_off        , dtk_off      , topflx_off    , errstring     , &
-                          tauresx_off   , tauresy_off        , 1            , cpairv_in    , rairi_in      , &
-                          do_molec_diff , compute_molec_diff , vd_lu_qdecomp, kvt_off )
-
-      elseif (trim(fieldlist_type) == "dry") then
-          call compute_vdiff( lchnk   ,                                                                     &
-                          pcols         , pver               , pcnst        , ncol          , state%pmiddry    , &
-                          state%pintdry    , state%rpdeldry        , state%t      , ztodt         , taux          , &
-                          tauy          , shflx              , cflx         , ntop          , nbot          , &
-                          kvh_in        , kvm_off            , kvq_off      , cgs_off       , cgh_off       , &
-                          zi      , ksrftms            , qmincg_in    , fieldlist_dry_in, fieldlist_molec_in, &
-                          u_off         , v_off              , q_off        , s_off         ,                 &
-                          tautmsx_off   , tautmsy_off        , dtk_off      , topflx_off    , errstring     , &
-                          tauresx_off   , tauresy_off        , 1            , cpairv_in    , rairi_in      , &
-                          do_molec_diff , compute_molec_diff , vd_lu_qdecomp, kvt_off )
-      else
-          errstring = "ERROR: fieldlist must be wet or dry in compute_vdiff_offline"
-          call endrun(errstring)
-      endif
-
-      call handle_errmsg(errstring, subname="compute_vdiff_offline", &
-           extra_msg="Error in offline compute_vdiff call from vertical_diffusion.")
-
-      if (do_print_out) then
-        write(iulog,*) '----------------- compute_vdiff_offline OUTPUTS -----------------'
-        write(iulog,*) 'dtk_off (output)      = ', dtk_off
-        write(iulog,*) 'topflx_off  (output)   = ', topflx_off 
-        
-        write(iulog,*) 'tautmsx_off  (output)  = ', tautmsx_off 
-        write(iulog,*) 'tautmsy_off  (output)  = ', tautmsy_off 
-        
-        write(iulog,*) 'tauresx_off  (output)  = ', tauresx_off 
-        write(iulog,*) 'tauresy_off  (output)  = ', tauresy_off 
-        
-        write(iulog,*) 'kvt_off  (output)      = ', kvt_off         
-
-        write(iulog,*) 's_off  (output)      = ', s_off
-        write(iulog,*) 'q_off  (output)      = ', q_off(:,:,1)
-      endif
-
-      !-----------------------------!
-      ! 4. Offline tendencies       !
-      !-----------------------------!
-      lq(:) = .true.
-      call physics_ptend_init(ptend_off, state%psetcols, "vertical diffusion offline", &
-           ls=.true., lu=.true., lv=.true., lq=lq)
-
-      rztodt = 1._r8/ztodt
-
-      ptend_off%s(:ncol,:)       = ( s_off(:ncol,:) - state%s(:ncol,:) ) * rztodt
-      ptend_off%u(:ncol,:)       = ( u_off(:ncol,:) - state%u(:ncol,:) ) * rztodt
-      ptend_off%v(:ncol,:)       = ( v_off(:ncol,:) - state%v(:ncol,:) ) * rztodt
-      ptend_off%q(:ncol,:pver,:) = ( q_off(:ncol,:pver,:) - state%q(:ncol,:pver,:) ) * rztodt
-
-      !-----------------------------!
-      ! 5. Offline after-PBL diags  !
-      !-----------------------------!
-      qv_off(:ncol,:) = q_off(:ncol,:,1)
-      ql_off(:ncol,:) = q_off(:ncol,:,ixcldliq)
-      qi_off(:ncol,:) = q_off(:ncol,:,ixcldice)
-
-      t_off(:ncol,:)  = ( s_off(:ncol,:) - gravit*state%zm(:ncol,:) ) / cpair
-
-      call qsat(t_off(:ncol,:), state%pmid(:ncol,:), tem2(:ncol,:), ftem(:ncol,:))
-      rh_off(:ncol,:) = qv_off(:ncol,:) / ftem(:ncol,:) * 100._r8
-
-      sl_off(:ncol,:) = s_off(:ncol,:) -   latvap           * ql_off(:ncol,:)  &
-                                   - ( latvap + latice )   * qi_off(:ncol,:)
-      qt_off(:ncol,:) = qv_off(:ncol,:) + ql_off(:ncol,:)  &
-                                   + qi_off(:ncol,:)
-      slv_off(:ncol,:)= sl_off(:ncol,:) * ( 1._r8 + zvir*qt_off(:ncol,:) )
-
-      !-----------------------------!
-      ! 6. Write offline diags      !
-      !-----------------------------!
-      call outfld('sl_aft_PBL_off',  sl_off,   pcols, lchnk)
-      call outfld('qt_aft_PBL_off',  qt_off,   pcols, lchnk)
-      call outfld('slv_aft_PBL_off', slv_off,  pcols, lchnk)
-
-      call outfld('u_aft_PBL_off',   u_off,    pcols, lchnk)
-      call outfld('v_aft_PBL_off',   v_off,    pcols, lchnk)
-
-      call outfld('qv_aft_PBL_off',  qv_off,   pcols, lchnk)
-      call outfld('ql_aft_PBL_off',  ql_off,   pcols, lchnk)
-      call outfld('qi_aft_PBL_off',  qi_off,   pcols, lchnk)
-
-      call outfld('t_aft_PBL_off',   t_off,    pcols, lchnk)
-      call outfld('rh_aft_PBL_off',  rh_off,   pcols, lchnk)
-
-   end subroutine compute_vdiff_offline_old
-  !---> yhc1113
+!  !<--- yhc1113, add do_offline_vdiff so I so try to modify the T,q, etc. right above the cloud top 
+!   subroutine compute_vdiff_offline_old(      lchnk, ncol, ztodt, state,             &
+!                                          taux, tauy, shflx, cflx,               &
+!                                          ntop, nbot,                             &
+!                                          kvh_in, kvm_in, kvq_in, cgs_in, cgh_in, &
+!                                          zi, ksrftms, qmincg_in,                 &
+!                                          u_in         , v_in              , q_in        , s_in, tauresx_in, tauresy_in,                 &
+!                                          fieldlist_type, fieldlist_dry_in, fieldlist_wet_in, fieldlist_molec_in,   &
+!                                          cpairv_in, rairi_in,                    &
+!                                          do_molec_diff,                          &
+!                                          ptend_off )
+!
+!      use physics_types,      only : physics_state, physics_ptend, physics_ptend_init
+!      use molec_diff,         only : compute_molec_diff, vd_lu_qdecomp
+!      use diffusion_solver,   only : compute_vdiff, any, operator(.not.)
+!      use wv_saturation,      only : qsat
+!      use cam_history,        only : outfld
+!      use cam_logfile,      only : iulog
+!      ! physics_state, physics_ptend are already in scope via host
+!
+!      implicit none
+!
+!      !-----------------------------!
+!      ! Arguments from main routine !
+!      !-----------------------------!
+!      integer,             intent(in)  :: lchnk
+!      integer,             intent(in)  :: ncol
+!      real(r8),            intent(in)  :: ztodt
+!      type(physics_state), intent(in)  :: state
+!
+!      real(r8), intent(in)            :: taux(pcols)
+!      real(r8), intent(in)            :: tauy(pcols)
+!      real(r8), intent(in)            :: shflx(pcols)
+!      real(r8), intent(in)            :: cflx(pcols,pcnst)
+!
+!      integer,  intent(in)            :: ntop, nbot
+!
+!      real(r8), intent(in)            :: kvh_in(pcols,pver+1)
+!      real(r8), intent(in)            :: kvm_in(pcols,pver+1)
+!      real(r8), intent(in)            :: kvq_in(pcols,pver+1)
+!      real(r8), intent(in)            :: cgs_in(pcols,pver+1)
+!      real(r8), intent(in)            :: cgh_in(pcols,pver+1)
+!
+!      real(r8), intent(in)            :: zi(pcols,pver+1)
+!      real(r8), intent(in)            :: ksrftms(pcols)
+!      real(r8), intent(in)            :: qmincg_in(pcnst)
+!
+!      character(len=*),     intent(in) :: fieldlist_type
+!      type(vdiff_selector), intent(in) :: fieldlist_dry_in
+!      type(vdiff_selector), intent(in) :: fieldlist_wet_in
+!      type(vdiff_selector), intent(in) :: fieldlist_molec_in
+!      
+!      real(r8), intent(in)            :: u_in(:,:)
+!      real(r8), intent(in)            :: v_in(:,:)
+!      real(r8), intent(in)            :: s_in(:,:)
+!      real(r8), intent(in)            :: q_in(:,:,:)
+!      real(r8), intent(in)            :: tauresx_in(pcols)
+!      real(r8), intent(in)            :: tauresy_in(pcols)
+!
+!      real(r8), intent(in)            :: cpairv_in(pcols,pver)
+!      real(r8), intent(in)            :: rairi_in(pcols,pver+1)
+!
+!      logical, intent(in)             :: do_molec_diff
+!
+!      type(physics_ptend), intent(out) :: ptend_off
+!
+!      !--------------------!
+!      ! Local work arrays  !
+!      !--------------------!
+!
+!      ! Offline state passed to compute_vdiff (intent(inout) in that routine)
+!      real(r8) :: s_off(pcols,pver)
+!      real(r8) :: u_off(pcols,pver)
+!      real(r8) :: v_off(pcols,pver)
+!      real(r8) :: q_off(pcols,pver,pcnst)
+!
+!      ! Local copies of in/out eddy / residual fields so online values are unchanged
+!      real(r8) :: kvm_off(pcols,pver+1)
+!      real(r8) :: kvq_off(pcols,pver+1)
+!      real(r8) :: cgs_off(pcols,pver+1)
+!      real(r8) :: cgh_off(pcols,pver+1)
+!      real(r8) :: tauresx_off(pcols)
+!      real(r8) :: tauresy_off(pcols)
+!
+!      ! Outputs from compute_vdiff (offline version)
+!      real(r8) :: dtk_off(pcols,pver)
+!      real(r8) :: tautmsx_off(pcols)
+!      real(r8) :: tautmsy_off(pcols)
+!      real(r8) :: topflx_off(pcols)
+!      real(r8) :: kvt_off(pcols,pver+1)
+!
+!      character(128) :: errstring
+!
+!      ! Offline diagnostics (after-PBL)
+!      real(r8) :: qv_off(pcols,pver)
+!      real(r8) :: ql_off(pcols,pver)
+!      real(r8) :: qi_off(pcols,pver)
+!      real(r8) :: t_off(pcols,pver)
+!      real(r8) :: rh_off(pcols,pver)
+!      real(r8) :: sl_off(pcols,pver)
+!      real(r8) :: qt_off(pcols,pver)
+!      real(r8) :: slv_off(pcols,pver)
+!
+!      real(r8) :: t_pre_PBL_off(pcols,pver)
+!      real(r8) :: sl_pre_PBL_off(pcols,pver)
+!      real(r8) :: qt_pre_PBL_off(pcols,pver)
+!      real(r8) :: slv_pre_PBL_off(pcols,pver)
+!
+!      logical :: lq(pcnst)
+!      real(r8) :: rztodt
+!
+!      real(r8) :: ftem(pcols,pver)                                    ! Saturation vapor pressure before PBL
+!      real(r8) :: tem2(pcols,pver)                                    ! Saturation specific humidity and RH
+!
+!      real(r8) :: zint(pver+1)   ! interface height (m)
+!      real(r8) :: zmid(pver)     ! interface height (m)
+!
+!      real(r8) :: slope_s, slope_qt, s_tmp0, qt_tmp0
+!      integer :: i,k
+!
+!      !logical :: do_print_out = .true.
+!      logical :: do_print_out = .false.
+!
+!      integer, parameter :: do_modify_cldtop_props = 0  ! modify s & q of the layer just above the cloud layer
+!                                                        ! 0: remain the same, do not do any extrapolation
+!                                                        ! 1: extropolate from the free troposphere to the boundary layer top
+!      real(r8), parameter :: ql_thresh  = 1.e-10_r8   ! kg/kg
+!      real(r8), parameter :: kvh_thresh = 1.e-10_r8   ! m2/s (avoid floating noise)
+!      real(r8), parameter :: ratio_qq   = 1._r8       ! example blend weight (0-1), V_new = ratio_qq * V(k-1) + (1-ratio_qq) * V(k)
+!      integer :: k_cldtop(pcols)
+!
+!!-----------------------------------
+!      if (do_print_out) then
+!        write(iulog,*) '----------------- compute_vdiff_offline INPUTS -----------------'
+!        write(iulog,*) 'fieldlist_type        = ', fieldlist_type
+!        write(iulog,*) 'lchnk                 = ', lchnk
+!        write(iulog,*) 'ncol                  = ', ncol
+!
+!        if (trim(fieldlist_type) == "wet") then        
+!          write(iulog,*) 'state%pmid            = ', state%pmid
+!          write(iulog,*) 'state%pint            = ', state%pint
+!          write(iulog,*) 'state%rpdel           = ', state%rpdel
+!        elseif (trim(fieldlist_type) == "dry") then        
+!          write(iulog,*) 'state%pmid            = ', state%pmiddry
+!          write(iulog,*) 'state%pint            = ', state%pintdry
+!          write(iulog,*) 'state%rpdel           = ', state%rpdeldry
+!        endif
+!
+!        write(iulog,*) 'state%t               = ', state%t
+!        write(iulog,*) 'ztodt                 = ', ztodt
+!        write(iulog,*) 'taux                  = ', taux
+!        write(iulog,*) 'tauy                  = ', tauy
+!        write(iulog,*) 'shflx                 = ', shflx
+!        write(iulog,*) 'cflx                  = ', cflx
+!        write(iulog,*) 'ntop                  = ', ntop
+!        write(iulog,*) 'nbot                  = ', nbot
+!        write(iulog,*) 'kvh_in                = ', kvh_in
+!        write(iulog,*) 'kvm_in                = ', kvm_in
+!        write(iulog,*) 'kvq_in                = ', kvq_in
+!        write(iulog,*) 'cgs_in                = ', cgs_in
+!        write(iulog,*) 'cgh_in                = ', cgh_in
+!        write(iulog,*) 'state%zi              = ', zi
+!        write(iulog,*) 'ksrftms               = ', ksrftms
+!        write(iulog,*) 'qmincg_in             = ', qmincg_in
+!        write(iulog,*) 'state%qv              = ', state%q(:,:,1)
+!        write(iulog,*) 'qv_in                 = ', q_in(:,:,1)
+!        write(iulog,*) 'state%u               = ', state%u
+!        write(iulog,*) 'u_in                  = ', u_in
+!        write(iulog,*) 'state%v               = ', state%v
+!        write(iulog,*) 'v_in                  = ', v_in
+!        write(iulog,*) 'state%s               = ', state%s
+!        write(iulog,*) 's_in                  = ', s_in
+!        
+!        write(iulog,*) 'fieldlist_in          = [derived type; contents not printed]'
+!        write(iulog,*) 'fieldlist_molec_in    = [derived type; contents not printed]'
+!        
+!        write(iulog,*) 'tauresx_in             = ', tauresx_in
+!        write(iulog,*) 'tauresy_in             = ', tauresy_in
+!        write(iulog,*) 'cpairv_in             = ', cpairv_in
+!        write(iulog,*) 'rairi_in              = ', rairi_in
+!        
+!        write(iulog,*) 'do_molec_diff         = ', do_molec_diff
+!        
+!      endif
+!
+!      !-----------------------------!
+!      ! 1. Copy state to offline    !
+!      !-----------------------------!
+!      !q_off(:ncol,:,:) = state%q(:ncol,:,:)
+!      !s_off(:ncol,:)   = state%s(:ncol,:)
+!      !u_off(:ncol,:)   = state%u(:ncol,:)
+!      !v_off(:ncol,:)   = state%v(:ncol,:)
+!
+!      q_off(:ncol,:,:) = q_in(:ncol,:,:)
+!      s_off(:ncol,:)   = s_in(:ncol,:)
+!      u_off(:ncol,:)   = u_in(:ncol,:)
+!      v_off(:ncol,:)   = v_in(:ncol,:)
+!
+!      ! Copy eddy / residual fields so we don't touch online ones
+!      kvm_off(:,:)     = kvm_in(:,:)
+!      kvq_off(:,:)     = kvq_in(:,:)
+!      cgs_off(:,:)     = cgs_in(:,:)
+!      cgh_off(:,:)     = cgh_in(:,:)
+!      tauresx_off(:)   = tauresx_in(:)
+!      tauresy_off(:)   = tauresy_in(:)
+!
+!      !-----------------------------!
+!      ! 2. Place for experiment     !
+!      !    (modify *_off here)      !
+!      !-----------------------------!
+!      ! e.g.:
+!      ! s_off(:ncol,:) = s_off(:ncol,:) + 0.5_r8
+!      !q_off(:ncol,:,1) = q_off(:ncol,:,1) + 1.e-3_r8
+!      
+!      qt_off(:ncol,:pver)  = q_off(:ncol,:,1) + q_off(:ncol,:,ixcldliq) &
+!                                              + q_off(:ncol,:,ixcldice)
+!
+!      do i = 1, ncol
+!        !--- get altitudes at interface and midpoints
+!        zint(:) = state%zi(i,:)
+!        do k=1,pver
+!          zmid(k) = 0.5_r8 * (zint(k) + zint(k+1))
+!        enddo
+!        !write(iulog,*) 'zmid             = ', zmid
+!
+!        !--- find the vertical index of the cloud layer  
+!        k_cldtop(:) = 0   ! 0 => no (mixing-active) cloud found in the column
+!        do k = 1, pver                       ! scan from model TOP downwards
+!          if ( state%q(i,k,ixcldliq) > ql_thresh ) then
+!            ! mixing-active if either adjacent interface has non-trivial kvh
+!            if ( kvh_in(i,k) > kvh_thresh  ) then
+!              k_cldtop(i) = k
+!              exit
+!            end if
+!          end if
+!        end do    ! end k loop
+!      end do      ! end i loop
+!
+!      !---
+!      if (do_modify_cldtop_props .eq. 1) then
+!        do i = 1, ncol
+!        
+!          if (k_cldtop(i) > 0) then    
+!            !--- linear extrapolation to compute s and qt at the cloud top
+!            k = k_cldtop(i) 
+!            slope_s = (s_off(i,k-2) - s_off(i,k-1)) / (zmid(k-2) - zmid(k-1))
+!            s_tmp0  = s_off(i, k-1) - slope_s*(zmid(k-1) - zint(k))
+!
+!            slope_qt = (qt_off(i,k-2) - qt_off(i,k-1)) / (zmid(k-2) - zmid(k-1))
+!            qt_tmp0  = qt_off(i, k-1) - slope_qt*(zmid(k-1) - zint(k))
+!
+!            if (do_print_out) then  
+!              write(iulog,*) 'fieldlist_type', fieldlist_type
+!              write(iulog,*) 'k_cldtop, zmid', k, zmid(k)
+!              write(iulog,*) 'zmid', zmid
+!              write(iulog,*) 'cldliq', state%q(i,:,ixcldliq)
+!              write(iulog,*) 's_cldtop, s_old, s_new, s_slope', s_off(i,k), s_off(i, k-1), s_tmp0, slope_s
+!              write(iulog,*) 'qt_cldtop, qt_old, qt_new, qt_slope', qt_off(i,k), qt_off(i, k-1), qt_tmp0, slope_qt
+!            endif 
+!
+!            !--- make sure the slope and value 
+!            if (      slope_s  >= 0. .and. s_tmp0  > s_off(i,k) &
+!                .and. slope_qt <= 0. .and. qt_tmp0 < qt_off(i,k) ) then
+!              s_off(i, k-1) = s_tmp0
+!              q_off(i, k-1, 1) = qt_tmp0 - q_off(i,k-1,ixcldliq) - q_off(i,k-1,ixcldice)
+!              if (do_print_out) write(iulog,*) "replace cloud top s and q, yaya"
+!            endif
+!
+!          endif  ! end if, k_cldtop
+!        enddo    ! end i loop      
+!      endif      ! end if, do_modify_cldtop_props=1
+!
+!      sl_pre_PBL_off(:ncol,:pver)  = s_off(:ncol,:) -   latvap * q_off(:ncol,:,ixcldliq) &
+!                                             - ( latvap + latice) * q_off(:ncol,:,ixcldice)
+!      qt_pre_PBL_off(:ncol,:pver)  = q_off(:ncol,:,1) + q_off(:ncol,:,ixcldliq) &
+!                                               + q_off(:ncol,:,ixcldice)
+!      slv_pre_PBL_off(:ncol,:pver) = sl_pre_PBL_off(:ncol,:pver) * ( 1._r8 + zvir*qt_pre_PBL_off(:ncol,:pver) )
+!
+!      t_pre_PBL_off(:ncol,:pver) = ( s_off(:ncol,:) - gravit * state%zm(:ncol,:) ) / cpair
+!      
+!      if (do_print_out) then  
+!        write(iulog,*) 'sl_pre_PBL_off',sl_pre_PBL_off
+!        write(iulog,*) 'qt_pre_PBL_off',qt_pre_PBL_off
+!      endif
+!
+!      call outfld( 'qt_pre_PBL_off   ', qt_pre_PBL_off,                 pcols, lchnk )
+!      call outfld( 'sl_pre_PBL_off   ', sl_pre_PBL_off,                 pcols, lchnk )
+!      call outfld( 'slv_pre_PBL_off  ', slv_pre_PBL_off,                pcols, lchnk )
+!      call outfld( 'u_pre_PBL_off    ', u_off,                   pcols, lchnk )
+!      call outfld( 'v_pre_PBL_off    ', v_off,                   pcols, lchnk )
+!      call outfld( 'qv_pre_PBL_off   ', q_off(:ncol,:,1),        pcols, lchnk )
+!      call outfld( 'ql_pre_PBL_off   ', q_off(:ncol,:,ixcldliq), pcols, lchnk )
+!      call outfld( 'qi_pre_PBL_off   ', q_off(:ncol,:,ixcldice), pcols, lchnk )
+!      call outfld( 't_pre_PBL_off    ', t_pre_PBL_off,                   pcols, lchnk )      
+!
+!      !-----------------------------!
+!      ! 3. Offline compute_vdiff    !
+!      !-----------------------------!
+!      tautmsx_off(:) = 0._r8
+!      tautmsy_off(:) = 0._r8
+!      dtk_off(:,:)   = 0._r8
+!      topflx_off(:)  = 0._r8
+!      kvt_off(:,:)   = 0._r8
+!      errstring      = ' '
+!
+!      if (trim(fieldlist_type) == "wet") then
+!          call compute_vdiff( lchnk   ,                                                                     &
+!                          pcols         , pver               , pcnst        , ncol          , state%pmid    , &
+!                          state%pint    , state%rpdel        , state%t      , ztodt         , taux          , &
+!                          tauy          , shflx              , cflx         , ntop          , nbot          , &
+!                          kvh_in        , kvm_off            , kvq_off      , cgs_off       , cgh_off       , &
+!                          zi      , ksrftms            , qmincg_in    , fieldlist_wet_in, fieldlist_molec_in, &
+!                          u_off         , v_off              , q_off        , s_off         ,                 &
+!                          tautmsx_off   , tautmsy_off        , dtk_off      , topflx_off    , errstring     , &
+!                          tauresx_off   , tauresy_off        , 1            , cpairv_in    , rairi_in      , &
+!                          do_molec_diff , compute_molec_diff , vd_lu_qdecomp, kvt_off )
+!
+!      elseif (trim(fieldlist_type) == "dry") then
+!          call compute_vdiff( lchnk   ,                                                                     &
+!                          pcols         , pver               , pcnst        , ncol          , state%pmiddry    , &
+!                          state%pintdry    , state%rpdeldry        , state%t      , ztodt         , taux          , &
+!                          tauy          , shflx              , cflx         , ntop          , nbot          , &
+!                          kvh_in        , kvm_off            , kvq_off      , cgs_off       , cgh_off       , &
+!                          zi      , ksrftms            , qmincg_in    , fieldlist_dry_in, fieldlist_molec_in, &
+!                          u_off         , v_off              , q_off        , s_off         ,                 &
+!                          tautmsx_off   , tautmsy_off        , dtk_off      , topflx_off    , errstring     , &
+!                          tauresx_off   , tauresy_off        , 1            , cpairv_in    , rairi_in      , &
+!                          do_molec_diff , compute_molec_diff , vd_lu_qdecomp, kvt_off )
+!      else
+!          errstring = "ERROR: fieldlist must be wet or dry in compute_vdiff_offline"
+!          call endrun(errstring)
+!      endif
+!
+!      call handle_errmsg(errstring, subname="compute_vdiff_offline", &
+!           extra_msg="Error in offline compute_vdiff call from vertical_diffusion.")
+!
+!      if (do_print_out) then
+!        write(iulog,*) '----------------- compute_vdiff_offline OUTPUTS -----------------'
+!        write(iulog,*) 'dtk_off (output)      = ', dtk_off
+!        write(iulog,*) 'topflx_off  (output)   = ', topflx_off 
+!        
+!        write(iulog,*) 'tautmsx_off  (output)  = ', tautmsx_off 
+!        write(iulog,*) 'tautmsy_off  (output)  = ', tautmsy_off 
+!        
+!        write(iulog,*) 'tauresx_off  (output)  = ', tauresx_off 
+!        write(iulog,*) 'tauresy_off  (output)  = ', tauresy_off 
+!        
+!        write(iulog,*) 'kvt_off  (output)      = ', kvt_off         
+!
+!        write(iulog,*) 's_off  (output)      = ', s_off
+!        write(iulog,*) 'q_off  (output)      = ', q_off(:,:,1)
+!      endif
+!
+!      !-----------------------------!
+!      ! 4. Offline tendencies       !
+!      !-----------------------------!
+!      lq(:) = .true.
+!      call physics_ptend_init(ptend_off, state%psetcols, "vertical diffusion offline", &
+!           ls=.true., lu=.true., lv=.true., lq=lq)
+!
+!      rztodt = 1._r8/ztodt
+!
+!      ptend_off%s(:ncol,:)       = ( s_off(:ncol,:) - state%s(:ncol,:) ) * rztodt
+!      ptend_off%u(:ncol,:)       = ( u_off(:ncol,:) - state%u(:ncol,:) ) * rztodt
+!      ptend_off%v(:ncol,:)       = ( v_off(:ncol,:) - state%v(:ncol,:) ) * rztodt
+!      ptend_off%q(:ncol,:pver,:) = ( q_off(:ncol,:pver,:) - state%q(:ncol,:pver,:) ) * rztodt
+!
+!      !-----------------------------!
+!      ! 5. Offline after-PBL diags  !
+!      !-----------------------------!
+!      qv_off(:ncol,:) = q_off(:ncol,:,1)
+!      ql_off(:ncol,:) = q_off(:ncol,:,ixcldliq)
+!      qi_off(:ncol,:) = q_off(:ncol,:,ixcldice)
+!
+!      t_off(:ncol,:)  = ( s_off(:ncol,:) - gravit*state%zm(:ncol,:) ) / cpair
+!
+!      call qsat(t_off(:ncol,:), state%pmid(:ncol,:), tem2(:ncol,:), ftem(:ncol,:))
+!      rh_off(:ncol,:) = qv_off(:ncol,:) / ftem(:ncol,:) * 100._r8
+!
+!      sl_off(:ncol,:) = s_off(:ncol,:) -   latvap           * ql_off(:ncol,:)  &
+!                                   - ( latvap + latice )   * qi_off(:ncol,:)
+!      qt_off(:ncol,:) = qv_off(:ncol,:) + ql_off(:ncol,:)  &
+!                                   + qi_off(:ncol,:)
+!      slv_off(:ncol,:)= sl_off(:ncol,:) * ( 1._r8 + zvir*qt_off(:ncol,:) )
+!
+!      !-----------------------------!
+!      ! 6. Write offline diags      !
+!      !-----------------------------!
+!      call outfld('sl_aft_PBL_off',  sl_off,   pcols, lchnk)
+!      call outfld('qt_aft_PBL_off',  qt_off,   pcols, lchnk)
+!      call outfld('slv_aft_PBL_off', slv_off,  pcols, lchnk)
+!
+!      call outfld('u_aft_PBL_off',   u_off,    pcols, lchnk)
+!      call outfld('v_aft_PBL_off',   v_off,    pcols, lchnk)
+!
+!      call outfld('qv_aft_PBL_off',  qv_off,   pcols, lchnk)
+!      call outfld('ql_aft_PBL_off',  ql_off,   pcols, lchnk)
+!      call outfld('qi_aft_PBL_off',  qi_off,   pcols, lchnk)
+!
+!      call outfld('t_aft_PBL_off',   t_off,    pcols, lchnk)
+!      call outfld('rh_aft_PBL_off',  rh_off,   pcols, lchnk)
+!
+!   end subroutine compute_vdiff_offline_old
+!  !---> yhc1113
 
   !<--- yhc1113, prepare input fields for vdiff offline calculations 
   subroutine get_inputs_vdiff_offline ( lchnk, state, ncol, kvh,         &
@@ -2227,7 +2230,10 @@ contains
     type(physics_state), intent(in) :: state
     real(r8),            intent(in)  :: kvh(pcols,pver+1)
   
-    integer,  intent(in)  :: do_modify_cldtop_props    
+    integer,  intent(in)  :: do_modify_cldtop_props    ! modify s & q of the layer just above the cloud layer
+                                                       ! 0: remain the same, do not do any changes
+                                                       ! 1: extropolate from the free troposphere to the boundary layer top
+
     real(r8), intent(out) :: s_off(pcols,pver)
     real(r8), intent(out) :: q_off(pcols,pver,pcnst)
     real(r8), intent(out) :: u_off(pcols,pver)
@@ -2473,9 +2479,9 @@ subroutine compute_tend_vdiff_offline(lchnk, state, ncol, ztodt, rztodt,        
                                                 + state%q(:ncol,:,ixcldice)
    slv_prePBL(:ncol,:pver) = sl_prePBL(:ncol,:pver) * ( 1._r8 + zvir*qt_prePBL(:ncol,:pver) )
 
-    call qsat(state%t(:ncol,:), state%pmid(:ncol,:), &
+   call qsat(state%t(:ncol,:), state%pmid(:ncol,:), &
          tem2(:ncol,:), ftem(:ncol,:))
-    ftem_prePBL(:ncol,:) = state%q(:ncol,:,1)/ftem(:ncol,:)*100._r8
+   ftem_prePBL(:ncol,:) = state%q(:ncol,:,1)/ftem(:ncol,:)*100._r8
 
    ! -------------------------------------------------------- !
    ! Diagnostics and output writing after applying PBL scheme !
