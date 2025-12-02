@@ -1451,11 +1451,14 @@ contains
     !<--- yhc1113, compute offline vertical diffusion tendencies
     if (do_modify_cldtop_props >= 0) then
 
-      !--- after_PBL state is pre_PBL plus changes in pre_PBL 
-      q_off(:ncol,:,:) = q_offMstate (:ncol,:,:) +  q_off(:ncol,:,:) 
-      s_off(:ncol,:)   = s_offMstate (:ncol,:)   +  s_off(:ncol,:)   
-      u_off(:ncol,:)   = u_offMstate (:ncol,:)   +  u_off(:ncol,:)   
-      v_off(:ncol,:)   = v_offMstate (:ncol,:)   +  v_off(:ncol,:)   
+      !--- compute the final state after PBL. Below is the step-by-step guide (variable name shown in parentheses)
+      !    1. state (state%) + offMstate (_offMstate) = off_prePBL (_off)
+      !    2. off_prePBL (_off) -> vertical diffusion -> off_aftPBL (_off)
+      !    3. final state = off_aftPBL (_off) - offMstate (_offMstate)
+      q_off(:ncol,:,:) = q_off(:ncol,:,:) - q_offMstate (:ncol,:,:) 
+      s_off(:ncol,:)   = s_off(:ncol,:)   - s_offMstate (:ncol,:)      
+      u_off(:ncol,:)   = u_off(:ncol,:)   - u_offMstate (:ncol,:)      
+      v_off(:ncol,:)   = v_off(:ncol,:)   - v_offMstate (:ncol,:)      
  
       call compute_tend_vdiff_offline(lchnk, state, ncol, ztodt, rztodt,                        &
                                s_off, u_off, v_off, q_off,                        &
