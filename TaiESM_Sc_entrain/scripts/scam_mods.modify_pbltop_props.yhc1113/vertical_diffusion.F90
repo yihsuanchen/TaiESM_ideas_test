@@ -629,6 +629,18 @@ contains
     call addfld( 'qiten_PBL_off   ', 'kg/kg/s', pver   , 'A', 'qi tendency by PBL_off'                                , phys_decomp )
     call addfld( 'tten_PBL_off    ', 'K/s'    , pver   , 'A', 'T tendency by PBL_off'                                 , phys_decomp )
     call addfld( 'rhten_PBL_off   ', '%/s'    , pver   , 'A', 'RH tendency by PBL_off'                                , phys_decomp )
+
+    call addfld('sl_off_aft_PBL  ', 'J/kg'   , pver, 'A', 'sl_off_aft_PBL',  phys_decomp)
+    call addfld('qt_off_aft_PBL  ', 'kg/kg'  , pver, 'A', 'qt_off_aft_PBL',  phys_decomp)
+    call addfld('slv_off_aft_PBL ', 'J/kg'   , pver, 'A', 'slv_off_aft_PBL', phys_decomp)
+    call addfld('u_off_aft_PBL   ', 'm/s'    , pver, 'A', 'u_off_aft_PBL',   phys_decomp)
+    call addfld('v_off_aft_PBL   ', 'm/s'    , pver, 'A', 'v_off_aft_PBL',   phys_decomp)
+    call addfld('qv_off_aft_PBL  ', 'kg/kg'  , pver, 'A', 'qv_off_aft_PBL',  phys_decomp)
+    call addfld('ql_off_aft_PBL  ', 'kg/kg'  , pver, 'A', 'ql_off_aft_PBL',  phys_decomp)
+    call addfld('qi_off_aft_PBL  ', 'kg/kg'  , pver, 'A', 'qi_off_aft_PBL',  phys_decomp)
+    call addfld('t_off_aft_PBL   ', 'K'      , pver, 'A', 't_off_aft_PBL',   phys_decomp)
+    call addfld('rh_off_aft_PBL  ', '%'      , pver, 'A', 'rh_off_aft_PBL',  phys_decomp)
+
     !---> yhc1113
  
     ! ----------------------------
@@ -934,21 +946,29 @@ contains
     !<--- yhc1113, add an offline compute_vdiff so I so try to modify the T,q, etc. right above the cloud top 
     !              do_modify_cldtop_props=0 : remain the same, do not do any changes
     !              do_modify_cldtop_props=1 : extropolate from the free troposphere to the boundary layer top
-    !integer, parameter :: do_modify_cldtop_props = 0
-    integer, parameter :: do_modify_cldtop_props = 1
+    integer, parameter :: do_modify_cldtop_props = 0
+    !integer, parameter :: do_modify_cldtop_props = 1
 
     type(physics_ptend) :: ptend_off
     real(r8) :: s_off(pcols,pver)
     real(r8) :: u_off(pcols,pver)
     real(r8) :: v_off(pcols,pver)
     real(r8) :: q_off(pcols,pver,pcnst)
+    real(r8) :: t_off(pcols,pver)
+    real(r8) :: ftem_off(pcols,pver)
+    real(r8) :: sl_off(pcols,pver)
+    real(r8) :: qt_off(pcols,pver)
+    real(r8) :: slv_off(pcols,pver)
+
     real(r8) :: s_offMstate(pcols,pver)
     real(r8) :: u_offMstate(pcols,pver)
     real(r8) :: v_offMstate(pcols,pver)
     real(r8) :: q_offMstate(pcols,pver,pcnst)
+
     real(r8) :: sl_pre_PBL_off(pcols,pver)
     real(r8) :: qt_pre_PBL_off(pcols,pver)
     real(r8) :: ftem_pre_PBL_off(pcols,pver)
+
     real(r8) :: tauresx_off(pcols)
     real(r8) :: tauresy_off(pcols)
     !---> yhc1113
@@ -1450,6 +1470,30 @@ contains
 
     !<--- yhc1113, compute offline vertical diffusion tendencies
     if (do_modify_cldtop_props >= 0) then
+
+      !--- output the fields afer vertical diffusio
+      sl_off(:,:)  = s_off(:,:) -   latvap * q_off(:,:,ixcldliq) &
+                                           - ( latvap + latice) * q_off(:,:,ixcldice)
+      qt_off(:,:)  = q_off(:,:,1) + q_off(:,:,ixcldliq) &
+                                  + q_off(:,:,ixcldice)
+      slv_off(:,:) = sl_off(:,:) * ( 1._r8 + zvir*qt_off(:,:) )
+ 
+      t_off(:,:) = ( s_off(:,:) - gravit * state%zm(:,:) ) / cpair
+
+      call qsat(t_off(:,:), state%pmid(:,:), &
+           tem2(:,:), ftem(:,:))
+      ftem_off(:,:) = q_off(:,:,1)/ftem(:,:)*100._r8
+
+      call outfld( 'qt_off_aft_PBL   ', qt_off,          pcols, lchnk )
+      call outfld( 'sl_off_aft_PBL   ', sl_off,          pcols, lchnk )
+      call outfld( 'slv_off_aft_PBL  ', slv_off,         pcols, lchnk )
+      call outfld( 'u_off_aft_PBL    ', u_off,                   pcols, lchnk )
+      call outfld( 'v_off_aft_PBL    ', v_off,                   pcols, lchnk )
+      call outfld( 'qv_off_aft_PBL   ', q_off(:ncol,:,1),        pcols, lchnk )
+      call outfld( 'ql_off_aft_PBL   ', q_off(:ncol,:,ixcldliq), pcols, lchnk )
+      call outfld( 'qi_off_aft_PBL   ', q_off(:ncol,:,ixcldice), pcols, lchnk )
+      call outfld( 't_off_aft_PBL    ', t_off,           pcols, lchnk )
+      call outfld( 'rh_off_aft_PBL   ', ftem_off,         pcols, lchnk )
 
       !--- compute the final state after PBL. Below is the step-by-step guide (variable name shown in parentheses)
       !    1. state (state%) + offMstate (_offMstate) = off_prePBL (_off)
@@ -2367,7 +2411,7 @@ contains
     s_offMstate (:ncol,:)    = s_off(:ncol,:)   - state%s(:ncol,:)
     u_offMstate (:ncol,:)    = u_off(:ncol,:)   - state%u(:ncol,:)
     v_offMstate (:ncol,:)    = v_off(:ncol,:)   - state%v(:ncol,:)
-
+ 
     !--- output
     call outfld( 'qt_pre_PBL_off   ', qt_pre_PBL_off,          pcols, lchnk )
     call outfld( 'sl_pre_PBL_off   ', sl_pre_PBL_off,          pcols, lchnk )
