@@ -946,8 +946,8 @@ contains
     !<--- yhc1113, add an offline compute_vdiff so I so try to modify the T,q, etc. right above the cloud top 
     !              do_modify_cldtop_props=0 : remain the same, do not do any changes
     !              do_modify_cldtop_props=1 : extropolate from the free troposphere to the boundary layer top
-    integer, parameter :: do_modify_cldtop_props = 0
-    !integer, parameter :: do_modify_cldtop_props = 1
+    !integer, parameter :: do_modify_cldtop_props = 0
+    integer, parameter :: do_modify_cldtop_props = 1
 
     type(physics_ptend) :: ptend_off
     real(r8) :: s_off(pcols,pver)
@@ -1264,7 +1264,7 @@ contains
     call outfld( 'rh_pre_PBL   ', ftem_prePBL,               pcols, lchnk )
 
     !<--- yhc1113
-    call get_inputs_vdiff_offline ( lchnk, state, ncol, kvh,         &
+    call get_inputs_vdiff_offline ( lchnk, state, ncol, kvh, pblh,        &
                                     do_modify_cldtop_props, s_off, q_off, u_off, v_off, &
                                     s_offMstate, q_offMstate, u_offMstate, v_offMstate, &
                                     sl_pre_PBL_off, qt_pre_PBL_off, ftem_pre_PBL_off &
@@ -2256,7 +2256,7 @@ contains
 !  !---> yhc1113
 
   !<--- yhc1113, prepare input fields for vdiff offline calculations 
-  subroutine get_inputs_vdiff_offline ( lchnk, state, ncol, kvh,         &
+  subroutine get_inputs_vdiff_offline ( lchnk, state, ncol, kvh, pblh, &
                                         do_modify_cldtop_props, s_off, q_off, u_off, v_off, &
                                         s_offMstate, q_offMstate, u_offMstate, v_offMstate, & 
                                         sl_pre_PBL_off, qt_pre_PBL_off, ftem_pre_PBL_off    & 
@@ -2276,7 +2276,8 @@ contains
     integer,             intent(in) :: ncol
     type(physics_state), intent(in) :: state
     real(r8),            intent(in)  :: kvh(pcols,pver+1)
-  
+    real(r8),            intent(in)  :: pblh(pcols)
+
     integer,  intent(in)  :: do_modify_cldtop_props    ! modify s & q of the layer just above the cloud layer
                                                        ! 0: remain the same, do not do any changes
                                                        ! 1: extropolate from the free troposphere to the boundary layer top
@@ -2366,13 +2367,15 @@ contains
           k = k_cldtop(i)
   
           slope_s = (s_off(i,k-2) - s_off(i,k-1)) / (zmid(k-2) - zmid(k-1))
-          s_tmp0  = s_off(i,k-1) - slope_s*(zmid(k-1) - zint(k))
+          s_tmp0  = s_off(i,k-1) - slope_s*(zmid(k-1) - pblh(i))
+          !s_tmp0  = s_off(i,k-1) - slope_s*(zmid(k-1) - zint(k))
   
           slope_qt = (qt_off(i,k-2) - qt_off(i,k-1)) / (zmid(k-2) - zmid(k-1))
-          qt_tmp0  = qt_off(i,k-1) - slope_qt*(zmid(k-1) - zint(k))
+          qt_tmp0  = qt_off(i,k-1) - slope_qt*(zmid(k-1) - pblh(i))
+          !qt_tmp0  = qt_off(i,k-1) - slope_qt*(zmid(k-1) - zint(k))
   
           if (do_print_out) then
-            write(iulog,*) 'k_cldtop, zmid', k, zmid(k)
+            write(iulog,*) 'k_cldtop, zint(k), zmid(k), pblh', k, zint(k), zmid(k), pblh
             write(iulog,*) 'zmid', zmid
             write(iulog,*) 'cldliq', state%q(i,:,ixcldliq)
             write(iulog,*) 's_cldtop, s_old, s_new, s_slope',  &
