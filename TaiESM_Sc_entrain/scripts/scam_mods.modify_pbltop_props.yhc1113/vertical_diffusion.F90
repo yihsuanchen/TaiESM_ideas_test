@@ -2443,7 +2443,7 @@ contains
           if (do_modify_cldtop_props.eq.2) then
             ke_factor =  (sl_tmp0 - sl_off(i,k)) / &
                          (sl_off(i,k-1) - sl_off(i,k))
-          elseif (do_modify_cldtop_props.eq.2) then
+          elseif (do_modify_cldtop_props.eq.3) then
             ke_factor =  (qt_tmp0 - qt_off(i,k)) / &
                          (qt_off(i,k-1) - qt_off(i,k))
           endif 
