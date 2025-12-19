@@ -587,6 +587,8 @@ contains
     endif
 
     !<--- yhc1113, add output fields from compute_vdiff_offline
+    call addfld('KVH_off', 'm2/s'      , pver+1, 'A', 'KVH_off',  phys_decomp)
+
     call addfld( 'qt_in_PBL_off  ', 'kg/kg'  , pver   , 'A', 'qt_in_PBL_off'                                         , phys_decomp )
     call addfld( 'sl_in_PBL_off  ', 'J/kg'   , pver   , 'A', 'sl_in_PBL_off'                                         , phys_decomp )
     call addfld( 'slv_in_PBL_off ', 'J/kg'   , pver   , 'A', 'slv_in_PBL_off'                                        , phys_decomp )
@@ -944,9 +946,12 @@ contains
     logical  :: lq(pcnst)
 
     !<--- yhc1113, add an offline compute_vdiff so I so try to modify the T,q, etc. right above the cloud top 
-    !              do_modify_cldtop_props=0 : remain the same, do not do any changes
-    !              do_modify_cldtop_props=1 : extropolate from the free troposphere to the boundary layer top
-    integer, parameter :: do_modify_cldtop_props = 0
+    !              do_modify_cldtop_props=0   : remain the same, do not do any changes
+    !              do_modify_cldtop_props=1   : extropolate from the free troposphere to the boundary layer top
+    !              do_modify_cldtop_props=2,3 : change entrainment flux, equivalent to multiply eddy diffusity at cloud top by multiply a factor.
+    !                                         : 2 - factor is calculated by sl, 3 - factor is calculated by qt
+    !integer, parameter :: do_modify_cldtop_props = 0
+    integer, parameter :: do_modify_cldtop_props = 3 
     !integer, parameter :: do_modify_cldtop_props = 1
 
     type(physics_ptend) :: ptend_off
@@ -959,6 +964,7 @@ contains
     real(r8) :: sl_off(pcols,pver)
     real(r8) :: qt_off(pcols,pver)
     real(r8) :: slv_off(pcols,pver)
+    real(r8) :: kvh_off(pcols,pver+1)
 
     real(r8) :: s_offMstate(pcols,pver)
     real(r8) :: u_offMstate(pcols,pver)
@@ -1265,7 +1271,7 @@ contains
 
     !<--- yhc1113
     call get_inputs_vdiff_offline ( lchnk, state, ncol, kvh, pblh,        &
-                                    do_modify_cldtop_props, s_off, q_off, u_off, v_off, &
+                                    do_modify_cldtop_props, s_off, q_off, u_off, v_off, kvh_off, &
                                     s_offMstate, q_offMstate, u_offMstate, v_offMstate, &
                                     sl_pre_PBL_off, qt_pre_PBL_off, ftem_pre_PBL_off &
                                   ) 
@@ -1340,7 +1346,8 @@ contains
                               pcols         , pver               , pcnst        , ncol          , state%pmid    , &
                               state%pint    , state%rpdel        , state%t      , ztodt         , taux          , &
                               tauy          , shflx              , cflx         , ntop          , nbot          , &
-                              kvh           , kvm                , kvq          , cgs           , cgh           , &
+                              kvh_off           , kvm                , kvq          , cgs           , cgh           , &
+                              !kvh           , kvm                , kvq          , cgs           , cgh           , &
                               state%zi      , ksrftms            , qmincg       , fieldlist_wet , fieldlist_molec,&
                               !u_tmp         , v_tmp              , q_tmp        , s_tmp         ,                 &
                               u_off         , v_off              , q_off        , s_off         ,                 &
@@ -1421,7 +1428,8 @@ contains
                               pcols         , pver               , pcnst        , ncol          , state%pmiddry , &
                               state%pintdry , state%rpdeldry     , state%t      , ztodt         , taux          , &       
                               tauy          , shflx              , cflx         , ntop          , nbot          , &       
-                              kvh           , kvm                , kvq          , cgs           , cgh           , &   
+                              kvh_off           , kvm                , kvq          , cgs           , cgh           , &   
+                              !kvh           , kvm                , kvq          , cgs           , cgh           , &   
                               state%zi      , ksrftms            , qmincg       , fieldlist_dry , fieldlist_molec,&
                               !u_tmp         , v_tmp              , q_tmp        , s_tmp         ,                 &
                               u_off         , v_off              , q_off        , s_off         ,                 &
@@ -2257,7 +2265,7 @@ contains
 
   !<--- yhc1113, prepare input fields for vdiff offline calculations 
   subroutine get_inputs_vdiff_offline ( lchnk, state, ncol, kvh, pblh, &
-                                        do_modify_cldtop_props, s_off, q_off, u_off, v_off, &
+                                        do_modify_cldtop_props, s_off, q_off, u_off, v_off, kvh_off, &
                                         s_offMstate, q_offMstate, u_offMstate, v_offMstate, & 
                                         sl_pre_PBL_off, qt_pre_PBL_off, ftem_pre_PBL_off    & 
                                       )
@@ -2296,7 +2304,7 @@ contains
     real(r8), intent(out) :: u_offMstate(pcols,pver)
     real(r8), intent(out) :: v_offMstate(pcols,pver)
 
-    real(r8) kvh_off(pcols,pver+1)
+    real(r8), intent(out) ::  kvh_off(pcols,pver+1)
 
     real(r8) :: sl_pre_PBL_offMstate(pcols,pver)
     real(r8) :: qt_pre_PBL_offMstate(pcols,pver)
@@ -2466,6 +2474,7 @@ contains
     v_offMstate (:ncol,:)    = v_off(:ncol,:)   - state%v(:ncol,:)
  
     !--- output
+    call outfld( 'KVH_off          ', kvh_off,                 pcols, lchnk )
     call outfld( 'qt_pre_PBL_off   ', qt_pre_PBL_off,          pcols, lchnk )
     call outfld( 'sl_pre_PBL_off   ', sl_pre_PBL_off,          pcols, lchnk )
     call outfld( 'slv_pre_PBL_off  ', slv_pre_PBL_off,         pcols, lchnk )
