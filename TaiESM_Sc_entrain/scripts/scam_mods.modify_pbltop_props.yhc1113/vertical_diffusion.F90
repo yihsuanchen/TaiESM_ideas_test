@@ -946,8 +946,8 @@ contains
     !<--- yhc1113, add an offline compute_vdiff so I so try to modify the T,q, etc. right above the cloud top 
     !              do_modify_cldtop_props=0 : remain the same, do not do any changes
     !              do_modify_cldtop_props=1 : extropolate from the free troposphere to the boundary layer top
-    !integer, parameter :: do_modify_cldtop_props = 0
-    integer, parameter :: do_modify_cldtop_props = 1
+    integer, parameter :: do_modify_cldtop_props = 0
+    !integer, parameter :: do_modify_cldtop_props = 1
 
     type(physics_ptend) :: ptend_off
     real(r8) :: s_off(pcols,pver)
@@ -2296,6 +2296,8 @@ contains
     real(r8), intent(out) :: u_offMstate(pcols,pver)
     real(r8), intent(out) :: v_offMstate(pcols,pver)
 
+    real(r8) kvh_off(pcols,pver+1)
+
     real(r8) :: sl_pre_PBL_offMstate(pcols,pver)
     real(r8) :: qt_pre_PBL_offMstate(pcols,pver)
     real(r8) :: ftem_pre_PBL_offMstate(pcols,pver)
@@ -2316,6 +2318,7 @@ contains
     real(r8) :: slope_s, slope_sl, slope_qt 
     real(r8) :: s_tmp0, sl_tmp0, qt_tmp0
     real(r8) :: tem2(pcols,pver)                                    ! Saturation specific humidity and RH
+    real(r8) :: ke_factor
 
     real(r8), parameter :: ql_thresh  = 1.e-10_r8   ! kg/kg
     real(r8), parameter :: kvh_thresh = 1.e-10_r8   ! m2/s (avoid floating noise)
@@ -2328,6 +2331,9 @@ contains
     !--------------------------------------------------------------------
  
     !--- initialize return fields
+    kvh_off (:ncol,:) = kvh(:ncol,:)
+    ke_factor = 1._r8
+
     q_off(:ncol,:,:) = state%q(:ncol,:,:)
     s_off(:ncol,:)   = state%s(:ncol,:)
     u_off(:ncol,:)   = state%u(:ncol,:)
@@ -2362,7 +2368,9 @@ contains
       end do
     end do
   
-    !---
+    !--------------------------------------------------------------------------------------------
+    ! do_modify_cldtop_props=1, extropolate from the free troposphere to the boundary layer top
+    !--------------------------------------------------------------------------------------------
     if (do_modify_cldtop_props .eq. 1) then
       do i = 1, ncol
   
@@ -2403,6 +2411,37 @@ contains
             if (do_print_out) write(iulog,*) "replace cloud top s and q, yaya"
           endif
   
+        endif  ! k_cldtop(i) > 0
+      enddo    ! i
+    endif      ! do_modify_cldtop_props
+
+    !--------------------------------------------------------------------------------------------
+    ! do_modify_cldtop_props=2, multiply cloud top K by a factor, 
+    !                           see my document, "Modified entrainment flux at the Sc top" 
+    !--------------------------------------------------------------------------------------------
+    if (do_modify_cldtop_props.eq.2 .or. do_modify_cldtop_props.eq.3) then
+      do i = 1, ncol
+  
+        if (k_cldtop(i) > 3) then
+          !--- linear extrapolation to compute s and qt at the cloud top
+          k = k_cldtop(i)
+
+          slope_sl = (sl_off(i,k-2) - sl_off(i,k-1)) / (zmid(k-2) - zmid(k-1))
+          sl_tmp0  = sl_off(i,k-1) - slope_sl*(zmid(k-1) - pblh(i))
+  
+          slope_qt = (qt_off(i,k-2) - qt_off(i,k-1)) / (zmid(k-2) - zmid(k-1))
+          qt_tmp0  = qt_off(i,k-1) - slope_qt*(zmid(k-1) - pblh(i))
+
+          if (do_modify_cldtop_props.eq.2) then
+            ke_factor =  (sl_tmp0 - sl_off(i,k)) / &
+                         (sl_off(i,k-1) - sl_off(i,k))
+          elseif (do_modify_cldtop_props.eq.2) then
+            ke_factor =  (qt_tmp0 - qt_off(i,k)) / &
+                         (qt_off(i,k-1) - qt_off(i,k))
+          endif 
+
+          kvh_off(i,k) = kvh_off(i,k) * ke_factor
+
         endif  ! k_cldtop(i) > 0
       enddo    ! i
     endif      ! do_modify_cldtop_props
