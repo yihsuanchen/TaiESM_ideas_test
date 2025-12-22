@@ -950,9 +950,14 @@ contains
     !              do_modify_cldtop_props=1   : extropolate from the free troposphere to the boundary layer top
     !              do_modify_cldtop_props=2,3 : change entrainment flux, equivalent to multiply eddy diffusity at cloud top by multiply a factor.
     !                                         : 2 - factor is calculated by sl, 3 - factor is calculated by qt
+    !              do_use_modified_kvh        : use modified eddy diffusity in model vdiff calculatures
     !integer, parameter :: do_modify_cldtop_props = 0
     integer, parameter :: do_modify_cldtop_props = 3 
     !integer, parameter :: do_modify_cldtop_props = 1
+
+    !logical, parameter :: do_use_modified_kvh = .false.
+    logical, parameter :: do_use_modified_kvh = .true.
+    !---> yhc1113
 
     type(physics_ptend) :: ptend_off
     real(r8) :: s_off(pcols,pver)
@@ -1275,6 +1280,8 @@ contains
                                     s_offMstate, q_offMstate, u_offMstate, v_offMstate, &
                                     sl_pre_PBL_off, qt_pre_PBL_off, ftem_pre_PBL_off &
                                   ) 
+
+    if (do_use_modified_kvh) kvh(:,:) = kvh_off(:,:)  ! use modified kvh if necessary
     !---> yhc1113
 
     ! --------------------------------------------------------------------------------- !
