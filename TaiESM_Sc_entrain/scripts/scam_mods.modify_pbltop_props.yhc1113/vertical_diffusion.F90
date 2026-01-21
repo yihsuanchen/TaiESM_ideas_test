@@ -643,6 +643,7 @@ contains
     call addfld('t_off_aft_PBL   ', 'K'      , pver, 'A', 't_off_aft_PBL',   phys_decomp)
     call addfld('rh_off_aft_PBL  ', '%'      , pver, 'A', 'rh_off_aft_PBL',  phys_decomp)
 
+    call addfld( 'freq_ke_factor'        , 'nono'    , 1      , 'A', 'frequency of modified Ke at cloud top', phys_decomp)
     !---> yhc1113
  
     ! ----------------------------
@@ -952,7 +953,7 @@ contains
     !                                         : 2 - factor is calculated by sl, 3 - factor is calculated by qt
     !              do_use_modified_kvh        : use modified eddy diffusity in model vdiff calculatures
     !integer, parameter :: do_modify_cldtop_props = 0
-    integer, parameter :: do_modify_cldtop_props = 3 
+    integer, parameter :: do_modify_cldtop_props = 2 
     !integer, parameter :: do_modify_cldtop_props = 1
 
     !logical, parameter :: do_use_modified_kvh = .false.
@@ -2325,6 +2326,7 @@ contains
     real(r8) :: qt_off(pcols,pver)
     real(r8) :: sl_off(pcols,pver)
     real(r8) :: ftem(pcols,pver)                                    ! Saturation vapor pressure before PBL
+    real(r8) :: freq_ke_factor(pcols)
 
     integer  :: i, k
     integer  :: k_cldtop(ncol)
@@ -2348,6 +2350,7 @@ contains
     !--- initialize return fields
     kvh_off (:ncol,:) = kvh(:ncol,:)
     ke_factor = 1._r8
+    freq_ke_factor = 0._r8
 
     q_off(:ncol,:,:) = state%q(:ncol,:,:)
     s_off(:ncol,:)   = state%s(:ncol,:)
@@ -2457,6 +2460,8 @@ contains
 
           kvh_off(i,k) = kvh_off(i,k) * ke_factor
 
+          freq_ke_factor(i) = 1._r8  ! count frequency
+
         endif  ! k_cldtop(i) > 0
       enddo    ! i
     endif      ! do_modify_cldtop_props
@@ -2491,7 +2496,8 @@ contains
     call outfld( 'ql_pre_PBL_off   ', q_off(:ncol,:,ixcldliq), pcols, lchnk )
     call outfld( 'qi_pre_PBL_off   ', q_off(:ncol,:,ixcldice), pcols, lchnk )
     call outfld( 't_pre_PBL_off    ', t_pre_PBL_off,           pcols, lchnk )
-    call outfld( 'rh_pre_PBL_off   ', ftem_pre_PBL_off,         pcols, lchnk )
+    call outfld( 'rh_pre_PBL_off   ', ftem_pre_PBL_off,        pcols, lchnk )
+    call outfld( 'freq_ke_factor'   , freq_ke_factor,          pcols, lchnk )
 
   end subroutine get_inputs_vdiff_offline
   !---> yhc1113, 
