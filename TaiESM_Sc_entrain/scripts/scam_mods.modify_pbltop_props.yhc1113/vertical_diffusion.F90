@@ -643,7 +643,7 @@ contains
     call addfld('t_off_aft_PBL   ', 'K'      , pver, 'A', 't_off_aft_PBL',   phys_decomp)
     call addfld('rh_off_aft_PBL  ', '%'      , pver, 'A', 'rh_off_aft_PBL',  phys_decomp)
 
-    call addfld( 'freq_ke_factor'        , 'nono'    , 1      , 'A', 'frequency of modified Ke at cloud top', phys_decomp)
+    call addfld( 'freq_ke_factor'        , 'none'    , 1      , 'A', 'frequency of modified Ke at cloud top', phys_decomp)
     !---> yhc1113
  
     ! ----------------------------
