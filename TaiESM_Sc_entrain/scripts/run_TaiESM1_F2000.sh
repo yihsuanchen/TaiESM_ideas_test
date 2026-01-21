@@ -61,18 +61,22 @@ STOP_OPTION="ndays"
 STOP_N=1
 
 #--- simulation case
-WRKDIR="$workdir/taiesm1_test_hindcast/"
+WRKDIR="$workdir/taiesm1_modified_Ke_Sc_top/"
 #CASENAME="xx01-taiesm1.${compset}.${res}.${temp}"
 #CASENAME="y1-hindcast_2001July-taiesm1.${compset}.${res}.${temp}"
 #CASENAME="hindcast02_2001July-taiesm1.${compset}.${res}"
 #CASENAME="hindcast03-taiesm1.${compset}.${res}"
 #CASENAME="hindcast03-taiesm1.${compset}.${res}.${temp}"
 #CASENAME="xx-hindcast03-taiesm1.${compset}.${res}"
-CASENAME="hindcast03-taiesm1.${compset}.${res}"
+#CASENAME="xx-taiesm1_NO_modified_Ke_Sc_top.${compset}.${res}.${temp}"
+CASENAME="xx-taiesm1_modified_Ke_sl_Sc_top.${compset}.${res}.${temp}"
+#CASENAME="xx-taiesm1_CTL.${compset}.${res}.${temp}"
+
 CASE="$WRKDIR/$CASENAME"
 
 #--- slurm setup
-do_submit="F"        # "T": submit the job
+#do_submit="F"        # "T": submit the job
+do_submit="T"        # "T": submit the job
 
 #account="MST112228"  # account name on Taiwania 3
 account="MST113255"  # account name on Taiwania 3  # update on 2025/03/27
@@ -81,7 +85,9 @@ num_cpu=128          # number of cpu
 #--- source code change
 do_srcmod="T"
 #srcmod_dir="/home/yihsuan123/research/TaiESM1_Sc_diag/scam_taiesm1/script/scam_mods"
-srcmod_dir="/home/yihsuan123/research/TaiESM1_Sc_diag/hindcast/script/src.cam"
+#srcmod_dir="/home/yihsuan123/research/TaiESM_ideas_test/TaiESM_Sc_entrain/scripts/scam_mods.ctl"
+srcmod_dir="/home/yihsuan123/research/TaiESM_ideas_test/TaiESM_Sc_entrain/scripts/scam_mods.modify_pbltop_props.yhc1113"
+
 
 ##################
 # program start
@@ -135,10 +141,10 @@ cd $CASE || exit 1
 #--- Modify run_TaiESM1_02-hindcast.sh to set namelist parameters because namelist will be recreated.
 cat > ./user_nl_cam << EOF
 &cam_inparm
-nhtfrq = 24 
-mfilt  = 12
+nhtfrq = -24 
 /
 EOF
+#fincl1 = "freq_ke_factor:A"
 
 #--- source code change
 if [ $do_srcmod == "T" ]; then
