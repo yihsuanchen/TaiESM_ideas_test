@@ -2342,7 +2342,9 @@ contains
 
     logical :: do_print_out = .true.
     !logical :: do_print_out = .false.
-  
+ 
+    logical :: l_monotonic, l_extrap_ok
+ 
     !--------------------------------------------------------------------
     ! Body
     !--------------------------------------------------------------------
@@ -2438,6 +2440,8 @@ contains
     !                           see my document, "Modified entrainment flux at the Sc top" 
     !--------------------------------------------------------------------------------------------
     if (do_modify_cldtop_props.eq.2 .or. do_modify_cldtop_props.eq.3) then
+      if (do_print_out) write(iulog,*) "yaya, do_modify_cldtop_props is", do_modify_cldtop_props
+
       do i = 1, ncol
   
         if (k_cldtop(i) > 3) then
@@ -2450,17 +2454,56 @@ contains
           slope_qt = (qt_off(i,k-2) - qt_off(i,k-1)) / (zmid(k-2) - zmid(k-1))
           qt_tmp0  = qt_off(i,k-1) - slope_qt*(zmid(k-1) - pblh(i))
 
-          if (do_modify_cldtop_props.eq.2) then
-            ke_factor =  (sl_tmp0 - sl_off(i,k)) / &
-                         (sl_off(i,k-1) - sl_off(i,k))
-          elseif (do_modify_cldtop_props.eq.3) then
-            ke_factor =  (qt_tmp0 - qt_off(i,k)) / &
-                         (qt_off(i,k-1) - qt_off(i,k))
-          endif 
+          ! Initialize
+          l_monotonic = .false.
+          l_extrap_ok = .false.
 
-          kvh_off(i,k) = kvh_off(i,k) * ke_factor
+          !--------------------------------------------------
+          ! Criterion 1:
+          ! check whether sl increases monotonically and q_t decreases monotonically above the pbl top, at least 3 levels
+          !--------------------------------------------------
+          if (k >= 4) then
+            if (       sl_off(i,k-1) > sl_off(i,k  )  &
+                 .and. sl_off(i,k-2) > sl_off(i,k-1)  &
+                 .and. sl_off(i,k-3) > sl_off(i,k-2)  &
+                 .and. qt_off(i,k-1) < qt_off(i,k  )  &
+                 .and. qt_off(i,k-2) < qt_off(i,k-1)  &
+                 .and. qt_off(i,k-3) < qt_off(i,k-2)) then
+               l_monotonic = .true.
+            endif
+          endif
+      
+          !--------------------------------------------------
+          ! Criterion 2:
+          ! Extrapolated sl must be between sl(k-1) and sl(k), sl(k-1) > sl_tmp0 > sl(k)  
+          ! and extrapolated qt must be between qt(k-1) and qt(k), qt(k-1) < qt_tmp0 < qt(k)
+          ! otherwise, ke_factor is larger than 1
+          !--------------------------------------------------
+          if (       sl_off(i,k-1) > sl_tmp0 .and. sl_tmp0 > sl_off(i,k)  &
+               .and. qt_off(i,k-1) < qt_tmp0 .and. qt_tmp0 < qt_off(i,k) ) then
+            l_extrap_ok = .true.
+          endif
 
-          freq_ke_factor(i) = 1._r8  ! count frequency
+          if (do_print_out) write(iulog,*) "yaya, l_monotonic, l_extrap_ok", l_monotonic, l_extrap_ok
+          if (do_print_out) write(iulog,*) "yaya, sl_off(i,k-1), sl_tmp0, sl_off(i,k)", sl_off(i,k-1), sl_tmp0, sl_off(i,k)
+          if (do_print_out) write(iulog,*) "yaya, qt_off(i,k-1), qt_tmp0, qt_off(i,k)", qt_off(i,k-1), qt_tmp0, qt_off(i,k)
+
+          if (l_monotonic .and. l_extrap_ok) then
+            if (do_modify_cldtop_props.eq.2) then
+              ke_factor =  (sl_tmp0 - sl_off(i,k)) / &
+                           (sl_off(i,k-1) - sl_off(i,k))
+            elseif (do_modify_cldtop_props.eq.3) then
+              ke_factor =  (qt_tmp0 - qt_off(i,k)) / &
+                           (qt_off(i,k-1) - qt_off(i,k))
+            endif 
+
+            if (do_print_out) write(iulog,*) "yaya, ke_factor is ",ke_factor
+            if (ke_factor > 1._r8) call endrun('get_inputs_vdiff_offline : ke_factor > 1 failed,  0 < ke_factor < 1')
+            if (ke_factor < 0._r8) call endrun('get_inputs_vdiff_offline : ke_factor < 0 failed,  0 < ke_factor < 1')
+
+            kvh_off(i,k) = kvh_off(i,k) * ke_factor
+            freq_ke_factor(i) = 1._r8  ! count frequency
+          endif
 
         endif  ! k_cldtop(i) > 0
       enddo    ! i
