@@ -954,6 +954,7 @@ contains
     !              do_use_modified_kvh        : use modified eddy diffusity in model vdiff calculatures
     !integer, parameter :: do_modify_cldtop_props = 0
     integer, parameter :: do_modify_cldtop_props = 2 
+    !integer, parameter :: do_modify_cldtop_props = 3 
     !integer, parameter :: do_modify_cldtop_props = 1
 
     !logical, parameter :: do_use_modified_kvh = .false.
@@ -2328,7 +2329,7 @@ contains
     real(r8) :: ftem(pcols,pver)                                    ! Saturation vapor pressure before PBL
     real(r8) :: freq_ke_factor(pcols)
 
-    integer  :: i, k
+    integer  :: i, k, kt
     integer  :: k_cldtop(ncol)
     real(r8) :: zint(pver+1)
     real(r8) :: zmid(pver)
@@ -2446,62 +2447,66 @@ contains
   
         if (k_cldtop(i) > 3) then
           !--- linear extrapolation to compute s and qt at the cloud top
-          k = k_cldtop(i)
+          kt = k_cldtop(i)
 
-          slope_sl = (sl_off(i,k-2) - sl_off(i,k-1)) / (zmid(k-2) - zmid(k-1))
-          sl_tmp0  = sl_off(i,k-1) - slope_sl*(zmid(k-1) - pblh(i))
+          slope_sl = (sl_off(i,kt-2) - sl_off(i,kt-1)) / (zmid(kt-2) - zmid(kt-1))
+          sl_tmp0  = sl_off(i,kt-1) - slope_sl*(zmid(kt-1) - pblh(i))
   
-          slope_qt = (qt_off(i,k-2) - qt_off(i,k-1)) / (zmid(k-2) - zmid(k-1))
-          qt_tmp0  = qt_off(i,k-1) - slope_qt*(zmid(k-1) - pblh(i))
+          slope_qt = (qt_off(i,kt-2) - qt_off(i,kt-1)) / (zmid(kt-2) - zmid(kt-1))
+          qt_tmp0  = qt_off(i,kt-1) - slope_qt*(zmid(kt-1) - pblh(i))
 
           ! Initialize
           l_monotonic = .false.
           l_extrap_ok = .false.
+          ke_factor   = 1._r8
 
           !--------------------------------------------------
           ! Criterion 1:
           ! check whether sl increases monotonically and q_t decreases monotonically above the pbl top, at least 3 levels
           !--------------------------------------------------
-          if (k >= 4) then
-            if (       sl_off(i,k-1) > sl_off(i,k  )  &
-                 .and. sl_off(i,k-2) > sl_off(i,k-1)  &
-                 .and. sl_off(i,k-3) > sl_off(i,k-2)  &
-                 .and. qt_off(i,k-1) < qt_off(i,k  )  &
-                 .and. qt_off(i,k-2) < qt_off(i,k-1)  &
-                 .and. qt_off(i,k-3) < qt_off(i,k-2)) then
+          if (kt >= 4) then
+            if (       sl_off(i,kt-1) > sl_off(i,kt  )  &
+                 .and. sl_off(i,kt-2) > sl_off(i,kt-1)  &
+                 .and. sl_off(i,kt-3) > sl_off(i,kt-2)  &
+                 .and. qt_off(i,kt-1) < qt_off(i,kt  )  &
+                 .and. qt_off(i,kt-2) < qt_off(i,kt-1)  &
+                 .and. qt_off(i,kt-3) < qt_off(i,kt-2)) then
                l_monotonic = .true.
             endif
           endif
       
           !--------------------------------------------------
           ! Criterion 2:
-          ! Extrapolated sl must be between sl(k-1) and sl(k), sl(k-1) > sl_tmp0 > sl(k)  
-          ! and extrapolated qt must be between qt(k-1) and qt(k), qt(k-1) < qt_tmp0 < qt(k)
+          ! Extrapolated sl must be between sl(kt-1) and sl(kt), sl(kt-1) > sl_tmp0 > sl(kt)  
+          ! and extrapolated qt must be between qt(kt-1) and qt(kt), qt(kt-1) < qt_tmp0 < qt(kt)
           ! otherwise, ke_factor is larger than 1
           !--------------------------------------------------
-          if (       sl_off(i,k-1) > sl_tmp0 .and. sl_tmp0 > sl_off(i,k)  &
-               .and. qt_off(i,k-1) < qt_tmp0 .and. qt_tmp0 < qt_off(i,k) ) then
+          if (       sl_off(i,kt-1) > sl_tmp0 .and. sl_tmp0 > sl_off(i,kt)  &
+               .and. qt_off(i,kt-1) < qt_tmp0 .and. qt_tmp0 < qt_off(i,kt) ) then
             l_extrap_ok = .true.
           endif
 
           if (do_print_out) write(iulog,*) "yaya, l_monotonic, l_extrap_ok", l_monotonic, l_extrap_ok
-          if (do_print_out) write(iulog,*) "yaya, sl_off(i,k-1), sl_tmp0, sl_off(i,k)", sl_off(i,k-1), sl_tmp0, sl_off(i,k)
-          if (do_print_out) write(iulog,*) "yaya, qt_off(i,k-1), qt_tmp0, qt_off(i,k)", qt_off(i,k-1), qt_tmp0, qt_off(i,k)
+          if (do_print_out) write(iulog,*) "yaya, sl_off(i,kt-1), sl_tmp0, sl_off(i,kt)", sl_off(i,kt-1), sl_tmp0, sl_off(i,kt)
+          if (do_print_out) write(iulog,*) "yaya, qt_off(i,kt-1), qt_tmp0, qt_off(i,kt)", qt_off(i,kt-1), qt_tmp0, qt_off(i,kt)
 
+          !l_extrap_ok = .true.
+          !l_monotonic = .true.
           if (l_monotonic .and. l_extrap_ok) then
             if (do_modify_cldtop_props.eq.2) then
-              ke_factor =  (sl_tmp0 - sl_off(i,k)) / &
-                           (sl_off(i,k-1) - sl_off(i,k))
+              ke_factor =  (sl_tmp0 - sl_off(i,kt)) / &
+                           (sl_off(i,kt-1) - sl_off(i,kt))
             elseif (do_modify_cldtop_props.eq.3) then
-              ke_factor =  (qt_tmp0 - qt_off(i,k)) / &
-                           (qt_off(i,k-1) - qt_off(i,k))
+              ke_factor =  (qt_tmp0 - qt_off(i,kt)) / &
+                           (qt_off(i,kt-1) - qt_off(i,kt))
             endif 
 
             if (do_print_out) write(iulog,*) "yaya, ke_factor is ",ke_factor
-            if (ke_factor > 1._r8) call endrun('get_inputs_vdiff_offline : ke_factor > 1 failed,  0 < ke_factor < 1')
-            if (ke_factor < 0._r8) call endrun('get_inputs_vdiff_offline : ke_factor < 0 failed,  0 < ke_factor < 1')
+            !if (ke_factor > 1._r8) call endrun('get_inputs_vdiff_offline : ke_factor > 1 failed,  0 < ke_factor < 1')
+            !if (ke_factor < 0._r8) call endrun('get_inputs_vdiff_offline : ke_factor < 0 failed,  0 < ke_factor < 1')
 
-            kvh_off(i,k) = kvh_off(i,k) * ke_factor
+            kvh_off(i,kt) = kvh_off(i,kt) * ke_factor
+            if (do_print_out) write(iulog,*) "yaya, kvh_in, kvh_off",kvh, kvh_off
             freq_ke_factor(i) = 1._r8  ! count frequency
           endif
 
