@@ -2342,8 +2342,8 @@ contains
     real(r8), parameter :: ql_thresh  = 1.e-10_r8   ! kg/kg
     real(r8), parameter :: kvh_thresh = 1.e-10_r8   ! m2/s (avoid floating noise)
 
-    logical :: do_print_out = .true.
-    !logical :: do_print_out = .false.
+    !logical :: do_print_out = .true.
+    logical :: do_print_out = .false.
  
     logical :: l_monotonic, l_extrap_ok
  
