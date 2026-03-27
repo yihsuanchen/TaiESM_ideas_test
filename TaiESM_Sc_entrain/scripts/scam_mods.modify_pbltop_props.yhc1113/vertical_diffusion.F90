@@ -644,6 +644,8 @@ contains
     call addfld('rh_off_aft_PBL  ', '%'      , pver, 'A', 'rh_off_aft_PBL',  phys_decomp)
 
     call addfld( 'freq_ke_factor'        , 'none'    , 1      , 'A', 'frequency of modified Ke at cloud top', phys_decomp)
+    call addfld( 'ke_factor'             , 'none'    , 1      , 'A', 'modified factor of Ke at cloud top', phys_decomp)
+    call addfld( 'z_cldtop_PBL'             , 'none'    , 1      , 'A', 'cloud top height in the PBL', phys_decomp)
     !---> yhc1113
  
     ! ----------------------------
@@ -1984,7 +1986,7 @@ contains
 !      real(r8) :: zint(pver+1)   ! interface height (m)
 !      real(r8) :: zmid(pver)     ! interface height (m)
 !
-!      real(r8) :: slope_s, slope_qt, s_tmp0, qt_tmp0
+!      real(r8) :: slope_s, slope_qt, s_tmp0, qt_pblh
 !      integer :: i,k
 !
 !      !logical :: do_print_out = .true.
@@ -2116,7 +2118,7 @@ contains
 !            s_tmp0  = s_off(i, k-1) - slope_s*(zmid(k-1) - zint(k))
 !
 !            slope_qt = (qt_off(i,k-2) - qt_off(i,k-1)) / (zmid(k-2) - zmid(k-1))
-!            qt_tmp0  = qt_off(i, k-1) - slope_qt*(zmid(k-1) - zint(k))
+!            qt_pblh  = qt_off(i, k-1) - slope_qt*(zmid(k-1) - zint(k))
 !
 !            if (do_print_out) then  
 !              write(iulog,*) 'fieldlist_type', fieldlist_type
@@ -2124,14 +2126,14 @@ contains
 !              write(iulog,*) 'zmid', zmid
 !              write(iulog,*) 'cldliq', state%q(i,:,ixcldliq)
 !              write(iulog,*) 's_cldtop, s_old, s_new, s_slope', s_off(i,k), s_off(i, k-1), s_tmp0, slope_s
-!              write(iulog,*) 'qt_cldtop, qt_old, qt_new, qt_slope', qt_off(i,k), qt_off(i, k-1), qt_tmp0, slope_qt
+!              write(iulog,*) 'qt_cldtop, qt_old, qt_new, qt_slope', qt_off(i,k), qt_off(i, k-1), qt_pblh, slope_qt
 !            endif 
 !
 !            !--- make sure the slope and value 
 !            if (      slope_s  >= 0. .and. s_tmp0  > s_off(i,k) &
-!                .and. slope_qt <= 0. .and. qt_tmp0 < qt_off(i,k) ) then
+!                .and. slope_qt <= 0. .and. qt_pblh < qt_off(i,k) ) then
 !              s_off(i, k-1) = s_tmp0
-!              q_off(i, k-1, 1) = qt_tmp0 - q_off(i,k-1,ixcldliq) - q_off(i,k-1,ixcldice)
+!              q_off(i, k-1, 1) = qt_pblh - q_off(i,k-1,ixcldliq) - q_off(i,k-1,ixcldice)
 !              if (do_print_out) write(iulog,*) "replace cloud top s and q, yaya"
 !            endif
 !
@@ -2327,16 +2329,15 @@ contains
     real(r8) :: qt_off(pcols,pver)
     real(r8) :: sl_off(pcols,pver)
     real(r8) :: ftem(pcols,pver)                                    ! Saturation vapor pressure before PBL
-    real(r8) :: freq_ke_factor(pcols)
+    real(r8) :: ke_factor(pcols), freq_ke_factor(pcols), z_cldtop_PBL(pcols)
 
     integer  :: i, k, kt
     integer  :: k_cldtop(ncol)
     real(r8) :: zint(pver+1)
     real(r8) :: zmid(pver)
     real(r8) :: slope_s, slope_sl, slope_qt 
-    real(r8) :: s_tmp0, sl_tmp0, qt_tmp0
+    real(r8) :: s_tmp0, sl_pblh, qt_pblh
     real(r8) :: tem2(pcols,pver)                                    ! Saturation specific humidity and RH
-    real(r8) :: ke_factor
 
     real(r8), parameter :: ql_thresh  = 1.e-10_r8   ! kg/kg
     real(r8), parameter :: kvh_thresh = 1.e-10_r8   ! m2/s (avoid floating noise)
@@ -2351,9 +2352,10 @@ contains
     !--------------------------------------------------------------------
  
     !--- initialize return fields
-    kvh_off (:ncol,:) = kvh(:ncol,:)
-    ke_factor = 1._r8
-    freq_ke_factor = 0._r8
+    kvh_off        (:ncol,:) = kvh(:ncol,:)
+    ke_factor      (:)       = 1._r8
+    freq_ke_factor (:)       = 0._r8
+    z_cldtop_PBL   (:)       = 0._r8
 
     q_off(:ncol,:,:) = state%q(:ncol,:,:)
     s_off(:ncol,:)   = state%s(:ncol,:)
@@ -2400,35 +2402,35 @@ contains
           k = k_cldtop(i)
 
           slope_sl = (sl_off(i,k-2) - sl_off(i,k-1)) / (zmid(k-2) - zmid(k-1))
-          sl_tmp0  = sl_off(i,k-1) - slope_sl*(zmid(k-1) - pblh(i))
+          sl_pblh  = sl_off(i,k-1) - slope_sl*(zmid(k-1) - pblh(i))
   
           slope_s = (s_off(i,k-2) - s_off(i,k-1)) / (zmid(k-2) - zmid(k-1))
           s_tmp0  = s_off(i,k-1) - slope_s*(zmid(k-1) - pblh(i))
           !!s_tmp0  = s_off(i,k-1) - slope_s*(zmid(k-1) - zint(k))
   
           slope_qt = (qt_off(i,k-2) - qt_off(i,k-1)) / (zmid(k-2) - zmid(k-1))
-          qt_tmp0  = qt_off(i,k-1) - slope_qt*(zmid(k-1) - pblh(i))
-          !qt_tmp0  = qt_off(i,k-1) - slope_qt*(zmid(k-1) - zint(k))
+          qt_pblh  = qt_off(i,k-1) - slope_qt*(zmid(k-1) - pblh(i))
+          !qt_pblh  = qt_off(i,k-1) - slope_qt*(zmid(k-1) - zint(k))
   
           if (do_print_out) then
             write(iulog,*) 'k_cldtop, zint(k), zmid(k), pblh', k, zint(k), zmid(k), pblh
             write(iulog,*) 'zmid', zmid
             write(iulog,*) 'cldliq', state%q(i,:,ixcldliq)
             write(iulog,*) 'sl_cldtop, sl_old, sl_new, sl_slope',  &
-                           sl_off(i,k), sl_off(i,k-1), sl_tmp0, slope_sl
+                           sl_off(i,k), sl_off(i,k-1), sl_pblh, slope_sl
             write(iulog,*) 's_cldtop, s_old, s_new, s_slope',  &
                            s_off(i,k), s_off(i,k-1), s_tmp0, slope_s
             write(iulog,*) 'qt_cldtop, qt_old, qt_new, qt_slope', &
-                           qt_off(i,k), qt_off(i,k-1), qt_tmp0, slope_qt
+                           qt_off(i,k), qt_off(i,k-1), qt_pblh, slope_qt
           endif
   
           !--- make sure the slope and value
-          if (      slope_sl >= 0._r8 .and. sl_tmp0 > sl_off(i,k) &
-              .and. slope_qt <= 0._r8 .and. qt_tmp0 < qt_off(i,k) ) then
-            sl_off(i,k-1)     = sl_tmp0
+          if (      slope_sl >= 0._r8 .and. sl_pblh > sl_off(i,k) &
+              .and. slope_qt <= 0._r8 .and. qt_pblh < qt_off(i,k) ) then
+            sl_off(i,k-1)     = sl_pblh
             s_off (i,k-1)     = sl_off(i,k-1) +   latvap * q_off(i,k-1,ixcldliq) &
                                               + ( latvap + latice) * q_off(i,k-1,ixcldice)
-            q_off (i,k-1,1)   = qt_tmp0 - q_off(i,k-1,ixcldliq) - q_off(i,k-1,ixcldice)
+            q_off (i,k-1,1)   = qt_pblh - q_off(i,k-1,ixcldliq) - q_off(i,k-1,ixcldice)
             if (do_print_out) write(iulog,*) "replace cloud top s and q, yaya"
           endif
   
@@ -2444,73 +2446,81 @@ contains
       if (do_print_out) write(iulog,*) "yaya, do_modify_cldtop_props is", do_modify_cldtop_props
 
       do i = 1, ncol
-  
-        if (k_cldtop(i) > 3) then
-          !--- linear extrapolation to compute s and qt at the cloud top
+
+        if (k_cldtop(i) >= 3) then  ! cloud top index must be > 3
+
+          !--- Initialize
           kt = k_cldtop(i)
-
-          slope_sl = (sl_off(i,kt-2) - sl_off(i,kt-1)) / (zmid(kt-2) - zmid(kt-1))
-          sl_tmp0  = sl_off(i,kt-1) - slope_sl*(zmid(kt-1) - pblh(i))
-  
-          slope_qt = (qt_off(i,kt-2) - qt_off(i,kt-1)) / (zmid(kt-2) - zmid(kt-1))
-          qt_tmp0  = qt_off(i,kt-1) - slope_qt*(zmid(kt-1) - pblh(i))
-
-          ! Initialize
           l_monotonic = .false.
           l_extrap_ok = .false.
-          ke_factor   = 1._r8
-
+          ke_factor(i)   = 1._r8
+          sl_pblh = 0._r8
+          qt_pblh = 0._r8
+  
           !--------------------------------------------------
           ! Criterion 1:
-          ! check whether sl increases monotonically and q_t decreases monotonically above the pbl top, at least 3 levels
+          ! Above the cloud top, liquid static energy (sl) increases monotonically and total
+          ! water mixing ratio (qt) decreases monotonically, so the extrapolation is meaningful:
+          ! sl(kt−2) > sl(kt−1) > sl(kt) & qt(kt−2) < qt(kt−1) < qt(kt) 
           !--------------------------------------------------
-          if (kt >= 4) then
-            if (       sl_off(i,kt-1) > sl_off(i,kt  )  &
-                 .and. sl_off(i,kt-2) > sl_off(i,kt-1)  &
-                 .and. sl_off(i,kt-3) > sl_off(i,kt-2)  &
-                 .and. qt_off(i,kt-1) < qt_off(i,kt  )  &
-                 .and. qt_off(i,kt-2) < qt_off(i,kt-1)  &
-                 .and. qt_off(i,kt-3) < qt_off(i,kt-2)) then
-               l_monotonic = .true.
-            endif
+          if (       sl_off(i,kt-1) > sl_off(i,kt  )  &
+               .and. sl_off(i,kt-2) > sl_off(i,kt-1)  &
+               .and. qt_off(i,kt-1) < qt_off(i,kt  )  &
+               .and. qt_off(i,kt-2) < qt_off(i,kt-1)) then
+             l_monotonic = .true.
           endif
-      
+    
+          if (l_monotonic) then
+            !--- linear extrapolation to compute s and qt at the cloud top
+            slope_sl = (sl_off(i,kt-2) - sl_off(i,kt-1)) / (zmid(kt-2) - zmid(kt-1))
+            sl_pblh  = sl_off(i,kt-1) - slope_sl*(zmid(kt-1) - pblh(i))
+    
+            slope_qt = (qt_off(i,kt-2) - qt_off(i,kt-1)) / (zmid(kt-2) - zmid(kt-1))
+            qt_pblh  = qt_off(i,kt-1) - slope_qt*(zmid(kt-1) - pblh(i))
+          endif
+        
           !--------------------------------------------------
           ! Criterion 2:
-          ! Extrapolated sl must be between sl(kt-1) and sl(kt), sl(kt-1) > sl_tmp0 > sl(kt)  
-          ! and extrapolated qt must be between qt(kt-1) and qt(kt), qt(kt-1) < qt_tmp0 < qt(kt)
-          ! otherwise, ke_factor is larger than 1
+          ! In order to avoid kvh_off < 0 or kvh_off > kvh_input, the extrapolated sl (qt) value at the PBL top
+          ! is between the value of a layer above and a layer below:
+          ! sl(kt), sl(kt-1) > sl_pblh > sl(kt) & qt(kt-1) < qt_pblh < qt(kt)
           !--------------------------------------------------
-          if (       sl_off(i,kt-1) > sl_tmp0 .and. sl_tmp0 > sl_off(i,kt)  &
-               .and. qt_off(i,kt-1) < qt_tmp0 .and. qt_tmp0 < qt_off(i,kt) ) then
+          if (       sl_off(i,kt-1) > sl_pblh .and. sl_pblh > sl_off(i,kt)  &
+               .and. qt_off(i,kt-1) < qt_pblh .and. qt_pblh < qt_off(i,kt) ) then
             l_extrap_ok = .true.
           endif
-
+  
           if (do_print_out) write(iulog,*) "yaya, l_monotonic, l_extrap_ok", l_monotonic, l_extrap_ok
-          if (do_print_out) write(iulog,*) "yaya, sl_off(i,kt-1), sl_tmp0, sl_off(i,kt)", sl_off(i,kt-1), sl_tmp0, sl_off(i,kt)
-          if (do_print_out) write(iulog,*) "yaya, qt_off(i,kt-1), qt_tmp0, qt_off(i,kt)", qt_off(i,kt-1), qt_tmp0, qt_off(i,kt)
-
+          if (do_print_out) write(iulog,*) "yaya, sl_off(i,kt-1), sl_pblh, sl_off(i,kt)", sl_off(i,kt-1), sl_pblh, sl_off(i,kt)
+          if (do_print_out) write(iulog,*) "yaya, qt_off(i,kt-1), qt_pblh, qt_off(i,kt)", qt_off(i,kt-1), qt_pblh, qt_off(i,kt)
+  
+          !--------------------------------------------------
+          ! modify eddy diffusivity at the cloud top
+          !--------------------------------------------------
+  
           !l_extrap_ok = .true.
           !l_monotonic = .true.
+  
           if (l_monotonic .and. l_extrap_ok) then
+  
             if (do_modify_cldtop_props.eq.2) then
-              ke_factor =  (sl_tmp0 - sl_off(i,kt)) / &
+              ke_factor(i) =  (sl_pblh - sl_off(i,kt)) / &
                            (sl_off(i,kt-1) - sl_off(i,kt))
             elseif (do_modify_cldtop_props.eq.3) then
-              ke_factor =  (qt_tmp0 - qt_off(i,kt)) / &
+              ke_factor(i) =  (qt_pblh - qt_off(i,kt)) / &
                            (qt_off(i,kt-1) - qt_off(i,kt))
             endif 
-
-            if (do_print_out) write(iulog,*) "yaya, ke_factor is ",ke_factor
-            !if (ke_factor > 1._r8) call endrun('get_inputs_vdiff_offline : ke_factor > 1 failed,  0 < ke_factor < 1')
-            !if (ke_factor < 0._r8) call endrun('get_inputs_vdiff_offline : ke_factor < 0 failed,  0 < ke_factor < 1')
-
-            kvh_off(i,kt) = kvh_off(i,kt) * ke_factor
-            if (do_print_out) write(iulog,*) "yaya, kvh_in, kvh_off",kvh, kvh_off
-            freq_ke_factor(i) = 1._r8  ! count frequency
+  
+            if (do_print_out) write(iulog,*) "yaya, i, kvh_in, kvh_off, ke_factor", i, kvh(i,:), kvh_off(i,:), ke_factor(i)
+            if (ke_factor(i) > 1._r8) call endrun('get_inputs_vdiff_offline : ke_factor > 1 failed,  0 < ke_factor < 1')
+            if (ke_factor(i) < 0._r8) call endrun('get_inputs_vdiff_offline : ke_factor < 0 failed,  0 < ke_factor < 1')
+  
+            kvh_off       (i,kt) = kvh_off(i,kt) * ke_factor(i)
+            freq_ke_factor(i)    = 1._r8  ! count frequency
+            z_cldtop_PBL  (i)    = pblh(i)
           endif
 
-        endif  ! k_cldtop(i) > 0
+        endif  ! k_cldtop(i) 
       enddo    ! i
     endif      ! do_modify_cldtop_props
   
@@ -2546,6 +2556,8 @@ contains
     call outfld( 't_pre_PBL_off    ', t_pre_PBL_off,           pcols, lchnk )
     call outfld( 'rh_pre_PBL_off   ', ftem_pre_PBL_off,        pcols, lchnk )
     call outfld( 'freq_ke_factor'   , freq_ke_factor,          pcols, lchnk )
+    call outfld( 'ke_factor'        , ke_factor,               pcols, lchnk )
+    call outfld( 'z_cldtop_PBL'     , z_cldtop_PBL,            pcols, lchnk )
 
   end subroutine get_inputs_vdiff_offline
   !---> yhc1113, 
