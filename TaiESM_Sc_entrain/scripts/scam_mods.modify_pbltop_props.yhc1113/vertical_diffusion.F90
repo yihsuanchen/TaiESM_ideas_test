@@ -643,9 +643,10 @@ contains
     call addfld('t_off_aft_PBL   ', 'K'      , pver, 'A', 't_off_aft_PBL',   phys_decomp)
     call addfld('rh_off_aft_PBL  ', '%'      , pver, 'A', 'rh_off_aft_PBL',  phys_decomp)
 
-    call addfld( 'freq_ke_factor'        , 'none'    , 1      , 'A', 'frequency of modified Ke at cloud top', phys_decomp)
-    call addfld( 'ke_factor'             , 'none'    , 1      , 'A', 'modified factor of Ke at cloud top', phys_decomp)
-    call addfld( 'z_cldtop_PBL'             , 'none'    , 1      , 'A', 'cloud top height in the PBL', phys_decomp)
+    call addfld( 'freq_ke_factor'        , 'none'    , 1      , 'A', 'frequency of modified Ke at pbl top', phys_decomp)
+    call addfld( 'ke_factor'             , 'none'    , 1      , 'A', 'modified factor of Ke at pbl top', phys_decomp)
+    call addfld( 'kvh_kt_orig'           , 'none'    , 1      , 'A', 'original Ke at pbk top', phys_decomp)
+    call addfld( 'z_cldtop_PBL'          , 'none'    , 1      , 'A', 'cloud top height in the PBL', phys_decomp)
     !---> yhc1113
  
     ! ----------------------------
@@ -2330,12 +2331,15 @@ contains
     !integer, parameter :: option_kt = 1  ! use the cloup top as the level to do modified entrainment flux
     integer, parameter :: option_kt = 2  ! use pbl top as the level to do modified entrainment flux
 
+    !logical :: do_print_out = .true.
+    logical :: do_print_out = .false.
+
     real(r8) :: slv_pre_PBL_off(pcols,pver)
     real(r8) :: t_pre_PBL_off(pcols,pver)
     real(r8) :: qt_off(pcols,pver)
     real(r8) :: sl_off(pcols,pver)
     real(r8) :: ftem(pcols,pver)                                    ! Saturation vapor pressure before PBL
-    real(r8) :: ke_factor(pcols), freq_ke_factor(pcols), z_cldtop_PBL(pcols)
+    real(r8) :: ke_factor(pcols), freq_ke_factor(pcols), z_cldtop_PBL(pcols), kvh_kt_orig(pcols)
 
     integer  :: i, k, kt
     integer  :: kt_pcols(pcols)
@@ -2347,9 +2351,6 @@ contains
 
     real(r8), parameter :: ql_thresh  = 1.e-10_r8   ! kg/kg
     real(r8), parameter :: kvh_thresh = 1.e-10_r8   ! m2/s (avoid floating noise)
-
-    logical :: do_print_out = .true.
-    !logical :: do_print_out = .false.
  
     logical :: l_monotonic, l_extrap_ok, l_kt
  
@@ -2362,6 +2363,7 @@ contains
     ke_factor      (:)       = 1._r8
     freq_ke_factor (:)       = 0._r8
     z_cldtop_PBL   (:)       = 0._r8
+    kvh_kt_orig    (:)       = 0._r8
 
     q_off(:ncol,:,:) = state%q(:ncol,:,:)
     s_off(:ncol,:)   = state%s(:ncol,:)
@@ -2412,6 +2414,8 @@ contains
       elseif (option_kt .eq. 2) then
         kt_pcols(i) = int(kpblh(i)) + 1
         if (kt_pcols(i) > 3 .and. kt_pcols(i) < pver+1) l_kt = .true.
+        kt=kt_pcols(i)
+        write(iulog,*) 'kt, zint(k), zmid(k), pblh', kt, zint(kt), zmid(kt), pblh
       
       else
         call endrun('get_inputs_vdiff_offline : option_kt is not supported')
@@ -2541,6 +2545,7 @@ contains
             kvh_off       (i,kt) = kvh_off(i,kt) * ke_factor(i)
             freq_ke_factor(i)    = 1._r8  ! count frequency
             z_cldtop_PBL  (i)    = pblh(i)
+            kvh_kt_orig   (i)    = kvh (i,kt) 
           endif
 
         endif  ! end if of l_kt 
@@ -2584,6 +2589,7 @@ contains
     call outfld( 'rh_pre_PBL_off   ', ftem_pre_PBL_off,        pcols, lchnk )
     call outfld( 'freq_ke_factor'   , freq_ke_factor,          pcols, lchnk )
     call outfld( 'ke_factor'        , ke_factor,               pcols, lchnk )
+    call outfld( 'kvh_kt_orig'      , kvh_kt_orig,             pcols, lchnk )
     call outfld( 'z_cldtop_PBL'     , z_cldtop_PBL,            pcols, lchnk )
 
   end subroutine get_inputs_vdiff_offline
