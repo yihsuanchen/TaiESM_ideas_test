@@ -1279,7 +1279,7 @@ contains
     call outfld( 'rh_pre_PBL   ', ftem_prePBL,               pcols, lchnk )
 
     !<--- yhc1113
-    call get_inputs_vdiff_offline ( lchnk, state, ncol, kvh, pblh,        &
+    call get_inputs_vdiff_offline ( lchnk, state, ncol, kvh, pblh, kpblh,       &
                                     do_modify_cldtop_props, s_off, q_off, u_off, v_off, kvh_off, &
                                     s_offMstate, q_offMstate, u_offMstate, v_offMstate, &
                                     sl_pre_PBL_off, qt_pre_PBL_off, ftem_pre_PBL_off &
@@ -2275,7 +2275,7 @@ contains
 !  !---> yhc1113
 
   !<--- yhc1113, prepare input fields for vdiff offline calculations 
-  subroutine get_inputs_vdiff_offline ( lchnk, state, ncol, kvh, pblh, &
+  subroutine get_inputs_vdiff_offline ( lchnk, state, ncol, kvh, pblh, kpblh, &
                                         do_modify_cldtop_props, s_off, q_off, u_off, v_off, kvh_off, &
                                         s_offMstate, q_offMstate, u_offMstate, v_offMstate, & 
                                         sl_pre_PBL_off, qt_pre_PBL_off, ftem_pre_PBL_off    & 
@@ -2294,8 +2294,11 @@ contains
     integer,             intent(in) :: lchnk       ! chunk index
     integer,             intent(in) :: ncol
     type(physics_state), intent(in) :: state
-    real(r8),            intent(in)  :: kvh(pcols,pver+1)
-    real(r8),            intent(in)  :: pblh(pcols)
+    real(r8),            intent(in)  :: kvh(pcols,pver+1)  ! eddy diffusivity for heat/tracers
+    real(r8),            intent(in)  :: pblh(pcols)        ! PBL depth 
+    real(r8),            intent(in)  :: kpblh(pcols)       ! index of pblh
+                                                           ! In the UW scheme, pblh is the surface-driven BL uppermost interface
+                                                           ! height. For instance, pblh=zint(k=28), kpblh = k-1 = 27
 
     integer,  intent(in)  :: do_modify_cldtop_props    ! modify s & q of the layer just above the cloud layer
                                                        ! 0: remain the same, do not do any changes
@@ -2324,6 +2327,9 @@ contains
     !--------------------------------------------------------------------
     ! Local variables
     !--------------------------------------------------------------------
+    integer, parameter :: option_kt = 1  ! use k_cldtop as the level to do modified entrainment flux
+    !integer, parameter :: option_kt = 2  ! use k_pblh as the level to do modified entrainment flux
+
     real(r8) :: slv_pre_PBL_off(pcols,pver)
     real(r8) :: t_pre_PBL_off(pcols,pver)
     real(r8) :: qt_off(pcols,pver)
@@ -2332,7 +2338,8 @@ contains
     real(r8) :: ke_factor(pcols), freq_ke_factor(pcols), z_cldtop_PBL(pcols)
 
     integer  :: i, k, kt
-    integer  :: k_cldtop(ncol)
+    integer  :: k_cldtop(pcols)
+    integer  :: k_pblh(pcols)
     real(r8) :: zint(pver+1)
     real(r8) :: zmid(pver)
     real(r8) :: slope_s, slope_sl, slope_qt 
@@ -2345,7 +2352,7 @@ contains
     !logical :: do_print_out = .true.
     logical :: do_print_out = .false.
  
-    logical :: l_monotonic, l_extrap_ok
+    logical :: l_monotonic, l_extrap_ok, l_kt(pcols)
  
     !--------------------------------------------------------------------
     ! Body
@@ -2368,36 +2375,46 @@ contains
     sl_off(:ncol,:pver)  = s_off(:ncol,:) -   latvap * q_off(:ncol,:,ixcldliq) &
                                           - ( latvap + latice) * q_off(:ncol,:,ixcldice)
 
+    l_kt(:) = .false.
+
     !--- find cloud-top level for each column
-    k_cldtop(:) = 0   ! 0 => no (mixing-active) cloud found in the column
-  
-    do i = 1, ncol
-      !--- get altitudes at interface and midpoints
-      zint(:) = state%zi(i,:)
-      do k = 1, pver
-        zmid(k) = 0.5_r8 * (zint(k) + zint(k+1))
-      enddo
-      !write(iulog,*) 'zmid             = ', zmid
-  
-      !--- find the vertical index of the cloud layer (scan from top)
-      do k = 1, pver
-        if ( state%q(i,k,ixcldliq) > ql_thresh ) then
-          ! mixing-active if either adjacent interface has non-trivial kvh
-          if ( kvh(i,k) > kvh_thresh ) then
-            k_cldtop(i) = k
-            exit
+    if (option_kt .eq. 1) then
+      k_cldtop(:) = 0   ! 0 => no (mixing-active) cloud found in the column
+    
+      do i = 1, ncol
+        !--- get altitudes at interface and midpoints
+        zint(:) = state%zi(i,:)
+        do k = 1, pver
+          zmid(k) = 0.5_r8 * (zint(k) + zint(k+1))
+        enddo
+        !write(iulog,*) 'zmid             = ', zmid
+    
+        !--- find the vertical index of the cloud layer (scan from top)
+        do k = 1, pver
+          if ( state%q(i,k,ixcldliq) > ql_thresh ) then
+            ! mixing-active if either adjacent interface has non-trivial kvh
+            if ( kvh(i,k) > kvh_thresh ) then
+              k_cldtop(i) = k
+              exit
+            end if
           end if
-        end if
-      end do
-    end do
-  
+        end do
+ 
+        if (k_cldtop(i) > 3)  l_kt(i) = .true.
+     end do
+
+    else
+      call endrun('get_inputs_vdiff_offline : option_kt is not supported')
+ 
+    endif  ! end if of option_kt
+ 
     !--------------------------------------------------------------------------------------------
     ! do_modify_cldtop_props=1, extropolate from the free troposphere to the boundary layer top
     !--------------------------------------------------------------------------------------------
     if (do_modify_cldtop_props .eq. 1) then
       do i = 1, ncol
   
-        if (k_cldtop(i) > 3) then
+        if (l_kt(i)) then
           !--- linear extrapolation to compute s and qt at the cloud top
           k = k_cldtop(i)
 
@@ -2447,7 +2464,7 @@ contains
 
       do i = 1, ncol
 
-        if (k_cldtop(i) >= 3) then  ! cloud top index must be > 3
+        if (l_kt(i)) then
 
           !--- Initialize
           kt = k_cldtop(i)
