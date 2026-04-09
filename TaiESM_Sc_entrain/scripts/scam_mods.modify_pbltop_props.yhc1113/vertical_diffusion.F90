@@ -2327,8 +2327,8 @@ contains
     !--------------------------------------------------------------------
     ! Local variables
     !--------------------------------------------------------------------
-    integer, parameter :: option_kt = 1  ! use k_cldtop as the level to do modified entrainment flux
-    !integer, parameter :: option_kt = 2  ! use k_pblh as the level to do modified entrainment flux
+    !integer, parameter :: option_kt = 1  ! use the cloup top as the level to do modified entrainment flux
+    integer, parameter :: option_kt = 2  ! use pbl top as the level to do modified entrainment flux
 
     real(r8) :: slv_pre_PBL_off(pcols,pver)
     real(r8) :: t_pre_PBL_off(pcols,pver)
@@ -2338,8 +2338,7 @@ contains
     real(r8) :: ke_factor(pcols), freq_ke_factor(pcols), z_cldtop_PBL(pcols)
 
     integer  :: i, k, kt
-    integer  :: k_cldtop(pcols)
-    integer  :: k_pblh(pcols)
+    integer  :: kt_pcols(pcols)
     real(r8) :: zint(pver+1)
     real(r8) :: zmid(pver)
     real(r8) :: slope_s, slope_sl, slope_qt 
@@ -2349,10 +2348,10 @@ contains
     real(r8), parameter :: ql_thresh  = 1.e-10_r8   ! kg/kg
     real(r8), parameter :: kvh_thresh = 1.e-10_r8   ! m2/s (avoid floating noise)
 
-    !logical :: do_print_out = .true.
-    logical :: do_print_out = .false.
+    logical :: do_print_out = .true.
+    !logical :: do_print_out = .false.
  
-    logical :: l_monotonic, l_extrap_ok, l_kt(pcols)
+    logical :: l_monotonic, l_extrap_ok, l_kt
  
     !--------------------------------------------------------------------
     ! Body
@@ -2375,99 +2374,106 @@ contains
     sl_off(:ncol,:pver)  = s_off(:ncol,:) -   latvap * q_off(:ncol,:,ixcldliq) &
                                           - ( latvap + latice) * q_off(:ncol,:,ixcldice)
 
-    l_kt(:) = .false.
+    !-------------------------
+    ! loop over each column
+    !-------------------------
+    do i = 1, ncol
 
-    !--- find cloud-top level for each column
-    if (option_kt .eq. 1) then
-      k_cldtop(:) = 0   ! 0 => no (mixing-active) cloud found in the column
-    
-      do i = 1, ncol
-        !--- get altitudes at interface and midpoints
-        zint(:) = state%zi(i,:)
-        do k = 1, pver
-          zmid(k) = 0.5_r8 * (zint(k) + zint(k+1))
-        enddo
-        !write(iulog,*) 'zmid             = ', zmid
+      !--- get altitudes at interface and midpoints
+      zint(:) = state%zi(i,:)
+      do k = 1, pver
+        zmid(k) = 0.5_r8 * (zint(k) + zint(k+1))
+      enddo
+      !write(iulog,*) 'zmid             = ', zmid
+
+      !--------------------------------------------------------------------------------------------
+      ! find the level index to do modified entrainment flux
+      !--------------------------------------------------------------------------------------------
+      l_kt = .false.
+
+      !--- find cloud-top level 
+      if (option_kt .eq. 1) then
+        kt_pcols(:) = 0   ! 0 => no (mixing-active) cloud found in the column
     
         !--- find the vertical index of the cloud layer (scan from top)
         do k = 1, pver
           if ( state%q(i,k,ixcldliq) > ql_thresh ) then
             ! mixing-active if either adjacent interface has non-trivial kvh
             if ( kvh(i,k) > kvh_thresh ) then
-              k_cldtop(i) = k
+              kt_pcols(i) = k
               exit
             end if
           end if
         end do
  
-        if (k_cldtop(i) > 3)  l_kt(i) = .true.
-     end do
+        if (kt_pcols(i) > 3)  l_kt = .true.
 
-    else
-      call endrun('get_inputs_vdiff_offline : option_kt is not supported')
+      !--- use the pbl top from the UW scheme
+      elseif (option_kt .eq. 2) then
+        kt_pcols(i) = int(kpblh(i)) + 1
+        if (kt_pcols(i) > 3 .and. kt_pcols(i) < pver+1) l_kt = .true.
+      
+      else
+        call endrun('get_inputs_vdiff_offline : option_kt is not supported')
  
-    endif  ! end if of option_kt
+      endif  ! end if of option_kt
  
-    !--------------------------------------------------------------------------------------------
-    ! do_modify_cldtop_props=1, extropolate from the free troposphere to the boundary layer top
-    !--------------------------------------------------------------------------------------------
-    if (do_modify_cldtop_props .eq. 1) then
-      do i = 1, ncol
+      !--------------------------------------------------------------------------------------------
+      ! do_modify_cldtop_props=1, extropolate from the free troposphere to the boundary layer top
+      !--------------------------------------------------------------------------------------------
+      if (do_modify_cldtop_props .eq. 1) then
   
-        if (l_kt(i)) then
+        if (l_kt) then
           !--- linear extrapolation to compute s and qt at the cloud top
-          k = k_cldtop(i)
+          kt = kt_pcols(i)
 
-          slope_sl = (sl_off(i,k-2) - sl_off(i,k-1)) / (zmid(k-2) - zmid(k-1))
-          sl_pblh  = sl_off(i,k-1) - slope_sl*(zmid(k-1) - pblh(i))
+          slope_sl = (sl_off(i,kt-2) - sl_off(i,kt-1)) / (zmid(kt-2) - zmid(kt-1))
+          sl_pblh  = sl_off(i,kt-1) - slope_sl*(zmid(kt-1) - pblh(i))
   
-          slope_s = (s_off(i,k-2) - s_off(i,k-1)) / (zmid(k-2) - zmid(k-1))
-          s_tmp0  = s_off(i,k-1) - slope_s*(zmid(k-1) - pblh(i))
-          !!s_tmp0  = s_off(i,k-1) - slope_s*(zmid(k-1) - zint(k))
+          slope_s = (s_off(i,kt-2) - s_off(i,kt-1)) / (zmid(kt-2) - zmid(kt-1))
+          s_tmp0  = s_off(i,kt-1) - slope_s*(zmid(kt-1) - pblh(i))
+          !!s_tmp0  = s_off(i,kt-1) - slope_s*(zmid(kt-1) - zint(k))
   
-          slope_qt = (qt_off(i,k-2) - qt_off(i,k-1)) / (zmid(k-2) - zmid(k-1))
-          qt_pblh  = qt_off(i,k-1) - slope_qt*(zmid(k-1) - pblh(i))
-          !qt_pblh  = qt_off(i,k-1) - slope_qt*(zmid(k-1) - zint(k))
+          slope_qt = (qt_off(i,kt-2) - qt_off(i,kt-1)) / (zmid(kt-2) - zmid(kt-1))
+          qt_pblh  = qt_off(i,kt-1) - slope_qt*(zmid(kt-1) - pblh(i))
+          !qt_pblh  = qt_off(i,kt-1) - slope_qt*(zmid(kt-1) - zint(k))
   
           if (do_print_out) then
-            write(iulog,*) 'k_cldtop, zint(k), zmid(k), pblh', k, zint(k), zmid(k), pblh
+            write(iulog,*) 'kt_pcols, zint(k), zmid(k), pblh', kt, zint(k), zmid(k), pblh
             write(iulog,*) 'zmid', zmid
             write(iulog,*) 'cldliq', state%q(i,:,ixcldliq)
             write(iulog,*) 'sl_cldtop, sl_old, sl_new, sl_slope',  &
-                           sl_off(i,k), sl_off(i,k-1), sl_pblh, slope_sl
+                           sl_off(i,k), sl_off(i,kt-1), sl_pblh, slope_sl
             write(iulog,*) 's_cldtop, s_old, s_new, s_slope',  &
-                           s_off(i,k), s_off(i,k-1), s_tmp0, slope_s
+                           s_off(i,k), s_off(i,kt-1), s_tmp0, slope_s
             write(iulog,*) 'qt_cldtop, qt_old, qt_new, qt_slope', &
-                           qt_off(i,k), qt_off(i,k-1), qt_pblh, slope_qt
+                           qt_off(i,k), qt_off(i,kt-1), qt_pblh, slope_qt
           endif
   
           !--- make sure the slope and value
           if (      slope_sl >= 0._r8 .and. sl_pblh > sl_off(i,k) &
               .and. slope_qt <= 0._r8 .and. qt_pblh < qt_off(i,k) ) then
-            sl_off(i,k-1)     = sl_pblh
-            s_off (i,k-1)     = sl_off(i,k-1) +   latvap * q_off(i,k-1,ixcldliq) &
-                                              + ( latvap + latice) * q_off(i,k-1,ixcldice)
-            q_off (i,k-1,1)   = qt_pblh - q_off(i,k-1,ixcldliq) - q_off(i,k-1,ixcldice)
+            sl_off(i,kt-1)     = sl_pblh
+            s_off (i,kt-1)     = sl_off(i,kt-1) +   latvap * q_off(i,kt-1,ixcldliq) &
+                                              + ( latvap + latice) * q_off(i,kt-1,ixcldice)
+            q_off (i,kt-1,1)   = qt_pblh - q_off(i,kt-1,ixcldliq) - q_off(i,kt-1,ixcldice)
             if (do_print_out) write(iulog,*) "replace cloud top s and q, yaya"
           endif
   
-        endif  ! k_cldtop(i) > 0
-      enddo    ! i
-    endif      ! do_modify_cldtop_props
+        endif  ! end if of l_kt 
+      endif      ! do_modify_cldtop_props
 
-    !--------------------------------------------------------------------------------------------
-    ! do_modify_cldtop_props=2, multiply cloud top K by a factor, 
-    !                           see my document, "Modified entrainment flux at the Sc top" 
-    !--------------------------------------------------------------------------------------------
-    if (do_modify_cldtop_props.eq.2 .or. do_modify_cldtop_props.eq.3) then
-      if (do_print_out) write(iulog,*) "yaya, do_modify_cldtop_props is", do_modify_cldtop_props
+      !--------------------------------------------------------------------------------------------
+      ! do_modify_cldtop_props=2, multiply cloud top K by a factor, 
+      !                           see my document, "Modified entrainment flux at the Sc top" 
+      !--------------------------------------------------------------------------------------------
+      if (do_modify_cldtop_props.eq.2 .or. do_modify_cldtop_props.eq.3) then
+        if (do_print_out) write(iulog,*) "yaya, do_modify_cldtop_props is", do_modify_cldtop_props
 
-      do i = 1, ncol
-
-        if (l_kt(i)) then
+        if (l_kt) then
 
           !--- Initialize
-          kt = k_cldtop(i)
+          kt = kt_pcols(i)
           l_monotonic = .false.
           l_extrap_ok = .false.
           ke_factor(i)   = 1._r8
@@ -2486,7 +2492,7 @@ contains
                .and. qt_off(i,kt-2) < qt_off(i,kt-1)) then
              l_monotonic = .true.
           endif
-    
+
           if (l_monotonic) then
             !--- linear extrapolation to compute s and qt at the cloud top
             slope_sl = (sl_off(i,kt-2) - sl_off(i,kt-1)) / (zmid(kt-2) - zmid(kt-1))
@@ -2537,10 +2543,14 @@ contains
             z_cldtop_PBL  (i)    = pblh(i)
           endif
 
-        endif  ! k_cldtop(i) 
-      enddo    ! i
-    endif      ! do_modify_cldtop_props
+        endif  ! end if of l_kt 
+      endif      ! do_modify_cldtop_props
   
+    enddo    ! i
+    !-------------------------
+    ! end loop over each column
+    !-------------------------
+
     !--- diagnose sl, qt, slv, and t
     sl_pre_PBL_off(:ncol,:pver)  = s_off(:ncol,:) -   latvap * q_off(:ncol,:,ixcldliq) &
                                            - ( latvap + latice) * q_off(:ncol,:,ixcldice)
