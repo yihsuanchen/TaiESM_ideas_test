@@ -2328,8 +2328,8 @@ contains
     !--------------------------------------------------------------------
     ! Local variables
     !--------------------------------------------------------------------
-    !integer, parameter :: option_kt = 1  ! use the cloup top as the level to do modified entrainment flux
-    integer, parameter :: option_kt = 2  ! use pbl top as the level to do modified entrainment flux
+    integer, parameter :: option_kt = 1  ! use the cloup top as the level to do modified entrainment flux
+    !integer, parameter :: option_kt = 2  ! use pbl top as the level to do modified entrainment flux
 
     !logical :: do_print_out = .true.
     logical :: do_print_out = .false.
@@ -2342,7 +2342,6 @@ contains
     real(r8) :: ke_factor(pcols), freq_ke_factor(pcols), z_cldtop_PBL(pcols), kvh_kt_orig(pcols)
 
     integer  :: i, k, kt
-    integer  :: kt_pcols(pcols)
     real(r8) :: zint(pver+1)
     real(r8) :: zmid(pver)
     real(r8) :: slope_s, slope_sl, slope_qt 
@@ -2392,35 +2391,34 @@ contains
       ! find the level index to do modified entrainment flux
       !--------------------------------------------------------------------------------------------
       l_kt = .false.
+      kt=0
 
       !--- find cloud-top level 
       if (option_kt .eq. 1) then
-        kt_pcols(:) = 0   ! 0 => no (mixing-active) cloud found in the column
     
         !--- find the vertical index of the cloud layer (scan from top)
         do k = 1, pver
           if ( state%q(i,k,ixcldliq) > ql_thresh ) then
             ! mixing-active if either adjacent interface has non-trivial kvh
             if ( kvh(i,k) > kvh_thresh ) then
-              kt_pcols(i) = k
+              kt = k
               exit
             end if
           end if
         end do
  
-        if (kt_pcols(i) > 3)  l_kt = .true.
+        if (kt > 3)  l_kt = .true.
 
       !--- use the pbl top from the UW scheme
       elseif (option_kt .eq. 2) then
-        kt_pcols(i) = int(kpblh(i)) + 1
-        if (kt_pcols(i) > 3 .and. kt_pcols(i) < pver+1) l_kt = .true.
-        kt=kt_pcols(i)
-        write(iulog,*) 'kt, zint(k), zmid(k), pblh', kt, zint(kt), zmid(kt), pblh
+        kt = int(kpblh(i)) + 1
+        if (kt > 3 .and. kt < pver+1) l_kt = .true.
       
       else
         call endrun('get_inputs_vdiff_offline : option_kt is not supported')
  
       endif  ! end if of option_kt
+      if (do_print_out .and. l_kt) write(iulog,*) 'opt_kt, kt, zint(kt), zmid(kt), pblh', option_kt, kt, zint(kt), zmid(kt), pblh
  
       !--------------------------------------------------------------------------------------------
       ! do_modify_cldtop_props=1, extropolate from the free troposphere to the boundary layer top
@@ -2429,8 +2427,6 @@ contains
   
         if (l_kt) then
           !--- linear extrapolation to compute s and qt at the cloud top
-          kt = kt_pcols(i)
-
           slope_sl = (sl_off(i,kt-2) - sl_off(i,kt-1)) / (zmid(kt-2) - zmid(kt-1))
           sl_pblh  = sl_off(i,kt-1) - slope_sl*(zmid(kt-1) - pblh(i))
   
@@ -2443,7 +2439,7 @@ contains
           !qt_pblh  = qt_off(i,kt-1) - slope_qt*(zmid(kt-1) - zint(k))
   
           if (do_print_out) then
-            write(iulog,*) 'kt_pcols, zint(k), zmid(k), pblh', kt, zint(k), zmid(k), pblh
+            write(iulog,*) 'kt, zint(k), zmid(k), pblh', kt, zint(k), zmid(k), pblh
             write(iulog,*) 'zmid', zmid
             write(iulog,*) 'cldliq', state%q(i,:,ixcldliq)
             write(iulog,*) 'sl_cldtop, sl_old, sl_new, sl_slope',  &
@@ -2477,13 +2473,12 @@ contains
         if (l_kt) then
 
           !--- Initialize
-          kt = kt_pcols(i)
           l_monotonic = .false.
           l_extrap_ok = .false.
           ke_factor(i)   = 1._r8
           sl_pblh = 0._r8
           qt_pblh = 0._r8
-  
+
           !--------------------------------------------------
           ! Criterion 1:
           ! Above the cloud top, liquid static energy (sl) increases monotonically and total
