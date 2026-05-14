@@ -1280,7 +1280,7 @@ contains
     call outfld( 'rh_pre_PBL   ', ftem_prePBL,               pcols, lchnk )
 
     !<--- yhc1113
-    call get_inputs_vdiff_offline ( lchnk, state, ncol, kvh, pblh, kpblh,       &
+    call get_inputs_vdiff_offline ( lchnk, state, ncol, kvh, pblh, kpblh, cldn,      &
                                     do_modify_cldtop_props, s_off, q_off, u_off, v_off, kvh_off, &
                                     s_offMstate, q_offMstate, u_offMstate, v_offMstate, &
                                     sl_pre_PBL_off, qt_pre_PBL_off, ftem_pre_PBL_off &
@@ -2276,7 +2276,7 @@ contains
 !  !---> yhc1113
 
   !<--- yhc1113, prepare input fields for vdiff offline calculations 
-  subroutine get_inputs_vdiff_offline ( lchnk, state, ncol, kvh, pblh, kpblh, &
+  subroutine get_inputs_vdiff_offline ( lchnk, state, ncol, kvh, pblh, kpblh, cldn, &
                                         do_modify_cldtop_props, s_off, q_off, u_off, v_off, kvh_off, &
                                         s_offMstate, q_offMstate, u_offMstate, v_offMstate, & 
                                         sl_pre_PBL_off, qt_pre_PBL_off, ftem_pre_PBL_off    & 
@@ -2300,6 +2300,7 @@ contains
     real(r8),            intent(in)  :: kpblh(pcols)       ! index of pblh
                                                            ! In the UW scheme, pblh is the surface-driven BL uppermost interface
                                                            ! height. For instance, pblh=zint(k=28), kpblh = k-1 = 27
+    real(r8),            intent(in)  :: cldn(pcols,pver)          ! New stratus fraction [ fraction ]
 
     integer,  intent(in)  :: do_modify_cldtop_props    ! modify s & q of the layer just above the cloud layer
                                                        ! 0: remain the same, do not do any changes
@@ -2328,8 +2329,8 @@ contains
     !--------------------------------------------------------------------
     ! Local variables
     !--------------------------------------------------------------------
-    integer, parameter :: option_kt = 1  ! use the cloup top as the level to do modified entrainment flux
-    !integer, parameter :: option_kt = 2  ! use pbl top as the level to do modified entrainment flux
+    !integer, parameter :: option_kt = 1  ! use the cloup top as the level to do modified entrainment flux
+    integer, parameter :: option_kt = 2  ! use pbl top as the level to do modified entrainment flux
 
     !logical :: do_print_out = .true.
     logical :: do_print_out = .false.
@@ -2348,11 +2349,13 @@ contains
     real(r8) :: s_tmp0, sl_pblh, qt_pblh
     real(r8) :: tem2(pcols,pver)                                    ! Saturation specific humidity and RH
 
-    real(r8), parameter :: ql_thresh  = 1.e-10_r8   ! kg/kg
-    real(r8), parameter :: kvh_thresh = 1.e-10_r8   ! m2/s (avoid floating noise)
+    real(r8), parameter :: ql_thresh   = 1.e-6_r8   ! kg/kg
+    real(r8), parameter :: kvh_thresh  = 1.e-2_r8   ! m2/s (avoid floating noise)
+    real(r8), parameter :: cldn_thresh = 0.5_r8      ! fraction
  
     logical :: l_monotonic, l_extrap_ok, l_kt
- 
+    logical :: is_cloud, in_cloud 
+
     !--------------------------------------------------------------------
     ! Body
     !--------------------------------------------------------------------
@@ -2391,23 +2394,29 @@ contains
       ! find the level index to do modified entrainment flux
       !--------------------------------------------------------------------------------------------
       l_kt = .false.
+      in_cloud = .false.
       kt=0
 
       !--- find cloud-top level 
       if (option_kt .eq. 1) then
     
         !--- find the vertical index of the cloud layer (scan from top)
-        do k = 1, pver
-          if ( state%q(i,k,ixcldliq) > ql_thresh ) then
-            ! mixing-active if either adjacent interface has non-trivial kvh
-            if ( kvh(i,k) > kvh_thresh ) then
-              kt = k
-              exit
-            end if
+        do k = pver, 1, -1
+        
+          is_cloud = (      state%q(i,k,ixcldliq) > ql_thresh  &
+                      .and. cldn(i,k) > cldn_thresh            &
+                      .and. kvh(i,k) > kvh_thresh )
+        
+          if (is_cloud) then
+            kt = k
+            in_cloud = .true.
+          else
+            if (in_cloud) exit
           end if
+        
         end do
  
-        if (kt > 3)  l_kt = .true.
+        if (kt > 3 .and. kt < pver+1)  l_kt = .true.
 
       !--- use the pbl top from the UW scheme
       elseif (option_kt .eq. 2) then
