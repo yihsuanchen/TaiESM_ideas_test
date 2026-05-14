@@ -2329,8 +2329,8 @@ contains
     !--------------------------------------------------------------------
     ! Local variables
     !--------------------------------------------------------------------
-    !integer, parameter :: option_kt = 1  ! use the cloup top as the level to do modified entrainment flux
-    integer, parameter :: option_kt = 2  ! use pbl top as the level to do modified entrainment flux
+    integer, parameter :: option_kt = 1  ! use the cloup top as the level to do modified entrainment flux
+    !integer, parameter :: option_kt = 2  ! use pbl top as the level to do modified entrainment flux
 
     !logical :: do_print_out = .true.
     logical :: do_print_out = .false.
@@ -2351,10 +2351,9 @@ contains
 
     real(r8), parameter :: ql_thresh   = 1.e-6_r8   ! kg/kg
     real(r8), parameter :: kvh_thresh  = 1.e-2_r8   ! m2/s (avoid floating noise)
-    real(r8), parameter :: cldn_thresh = 0.5_r8      ! fraction
+    real(r8), parameter :: cldn_thresh = 0.5_r8     ! fraction
  
     logical :: l_monotonic, l_extrap_ok, l_kt
-    logical :: is_cloud, in_cloud 
 
     !--------------------------------------------------------------------
     ! Body
@@ -2394,29 +2393,33 @@ contains
       ! find the level index to do modified entrainment flux
       !--------------------------------------------------------------------------------------------
       l_kt = .false.
-      in_cloud = .false.
       kt=0
 
       !--- find cloud-top level 
       if (option_kt .eq. 1) then
-    
-        !--- find the vertical index of the cloud layer (scan from top)
-        do k = pver, 1, -1
-        
-          is_cloud = (      state%q(i,k,ixcldliq) > ql_thresh  &
-                      .and. cldn(i,k) > cldn_thresh            &
-                      .and. kvh(i,k) > kvh_thresh )
-        
-          if (is_cloud) then
-            kt = k
-            in_cloud = .true.
-          else
-            if (in_cloud) exit
-          end if
-        
-        end do
- 
-        if (kt > 3 .and. kt < pver+1)  l_kt = .true.
+
+        kt = int(kpblh(i)) + 1
+        if (      kt > 3 .and. kt < pver+1            &
+            .and. state%q(i,kt,ixcldliq) > ql_thresh  &
+            .and. cldn   (i,kt)          > cldn_thresh) then
+          l_kt = .true.
+        endif
+
+        !<--- this code may fail if a cloud layer exist from BL to above BL. kt will be inside the cloud layer.
+        !do k = pver, 1, -1
+        !  is_cloud = (      state%q(i,k,ixcldliq) > ql_thresh  &
+        !              .and. cldn(i,k) > cldn_thresh            &
+        !              .and. kvh(i,k) > kvh_thresh )
+        ! 
+        !  if (is_cloud) then
+        !    kt = k
+        !    in_cloud = .true.
+        !  else
+        !    if (in_cloud) exit
+        !  end if
+        !end do
+        !if (kt > 3 .and. kt < pver+1)  l_kt = .true.
+        !--->
 
       !--- use the pbl top from the UW scheme
       elseif (option_kt .eq. 2) then
@@ -2542,7 +2545,6 @@ contains
                            (qt_off(i,kt-1) - qt_off(i,kt))
             endif 
   
-            if (do_print_out) write(iulog,*) "yaya, i, kvh_in, kvh_off, ke_factor", i, kvh(i,:), kvh_off(i,:), ke_factor(i)
             if (ke_factor(i) > 1._r8) call endrun('get_inputs_vdiff_offline : ke_factor > 1 failed,  0 < ke_factor < 1')
             if (ke_factor(i) < 0._r8) call endrun('get_inputs_vdiff_offline : ke_factor < 0 failed,  0 < ke_factor < 1')
   
@@ -2550,6 +2552,10 @@ contains
             freq_ke_factor(i)    = 1._r8  ! count frequency
             z_cldtop_PBL  (i)    = pblh(i)
             kvh_kt_orig   (i)    = kvh (i,kt) 
+
+            if (do_print_out) write(iulog,*) "yaya, i, kt, ke_factor", i, kt, ke_factor(i)
+            if (do_print_out) write(iulog,*) "yaya, i, kvh_in" , i, kvh(i,:)
+            if (do_print_out) write(iulog,*) "yaya, i, kvh_out", i, kvh_off(i,:)
           endif
 
         endif  ! end if of l_kt 
