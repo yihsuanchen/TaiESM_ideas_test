@@ -1,0 +1,434 @@
+#!/bin/csh -f
+#
+#   Master script for CCSM Ocean Time-Mean & Seasonal Diagnostics
+#	including differences relative to a control case
+#
+# Modifications:
+#   1. Generate CNTRLCARE needed netCDF files
+#
+# Yi-Hsuan Chen
+# May 15, 2026
+#---------------
+
+#set verbose
+
+# === this script only use ncl_ncarg/6.1.2
+module purge
+module load ncl_gcc-4.8.5/6.2.1
+module load aws-sdk-cpp_gcc-10.3.1/1.11.30 netcdf_hdf5-1.10.5_gcc-10.3.1/4.9.1 nco_netcdf-4.9.1_gcc-10.3.1/5.1.4 netcdf_hdf5-1.10.5_gcc-10.3.1/4.9.1
+
+#----------------- SET CASE INFO -------------------------------#
+setenv CASE q2-taiesm1_modified_Ke_Sc_top_sl_kt2_pbltop.B_2000_TAI.f09_g16.0422_1417
+setenv RESOLUTION gx1v6 
+setenv YEAR0 6
+setenv YEAR1 35 
+#setenv CPL 6       #set to 7 if CCSM4 or higher, set to 6 otherwise
+setenv CPL 7
+setenv CNTRLCASE f09.B2000.ft13 
+setenv CNTRLRESOLUTION gx1v6
+setenv CNTRLYEAR0 $YEAR0
+setenv CNTRLYEAR1 $YEAR1
+setenv CPLCNTRL 7
+
+#----------------- SET PLOT INFO -------------------------------#
+setenv DOPLOTS 1		# generate plots for flagged PM's
+set xyrange  = (30 390 -90 90)		# x0,x1,y0,y1
+set depths = (0 50 100 200 300 500 1000 1500 2000 2500 3000 3500 4000 )
+setenv CNTRLVLS		std	# contour level options (std, gauss)
+## available plot modules
+setenv PM_SFC2D 	1	# 2D surface fluxes 
+setenv PM_FLD2D 	1	# all other 2D fields (HMXL, SSH, BSF, etc)
+setenv PM_FLD3DZA 	1	# 3D field zonal average plots
+setenv PM_UOEQ	 	1	# Upperocean T,S,PD,U @ Equator
+setenv PM_MOC	 	1	# MOC, HT&FW transports
+setenv PM_SEAS	 	1	# Seasonal cycle plots
+setenv PM_MLD           1       # mixed layer depth
+setenv PM_TSZ	 	1	# T&S on depth surfaces, contours
+setenv PM_PASSIVEZ 	1	# Passive tracers on depth surfaces, contours
+setenv PM_VELZ	 	1	# UVEL,VVEL,WVEL on depth surfaces, contours
+setenv PM_VELISOPZ	1	# Bolus velocities on depth surfaces, contours
+setenv PM_KAPPAZ	1	# Diffusion Coeffs on depth surfaces, contours
+
+#----------------- SET MSS INFO --------------------------------#
+setenv TAVGFILE tavg.$YEAR0.$YEAR1.nc
+setenv CNTRLFILE tavg.$CNTRLYEAR0.$CNTRLYEAR1.cntrl.nc
+setenv MSROOT /lfs/home/yihsuanc/test/j1-modified_Ke_Sc_top
+setenv CNTRLMSROOT $MSROOT
+setenv datafile_type_gz 0                           # kilmer: 2:*.nc.tar.gz; 1 for *.nc.gz files, 0 for *.nc files
+setenv MSPROJ 00000000
+setenv MSRPD 3000
+# NOTE! $TOOLPATH scripts assume the following mass store directory 
+# structure:
+#     /${MSROOT}/${CASE}/ocn/hist	
+#     /${MSROOT}/${CASE}/ocn/proc/tavg/annual
+#     /${MSROOT}/${CASE}/ocn/proc/tavg/monthly
+
+#----------------- SET WEB PAGE INFO - -------------------------#
+setenv DOWEB 1		# generate a web page for flagged PM's 
+setenv WEBMACH webpub.ucar.edu
+setenv WEBDIR1 /web/ncl/Applications/popdiag/
+#setenv WEBDIR2 ${WEBDIR1}/pd.${CNTRLCASE}.${CNTRLYEAR0}_${CNTRLYEAR1}
+#setenv APPEND 0		# append new plots if web page already exists
+#setenv GLOSSARY 0	# append a POP glossary at the bottom of web page
+setenv WEBMACH webpub.ucar.edu
+setenv WEBDIR1 /web/ncl/Applications/popdiag/
+setenv WEBDIR2 ${WEBDIR1}/pd.${YEAR0}_${YEAR1}
+setenv APPEND 0	        # append new plots if web page already exists
+setenv GLOSSARY 1	# append a POP glossary at the bottom of web page
+
+#----------------- SET PATH INFO -------------------------------#
+#setenv DIAGROOTPATH /lfs/home/lama/work/taiesm_diag/pop_diag 
+setenv DIAGROOTPATH /lfs/home/yihsuanc/test/j1-modified_Ke_Sc_top/pop2_diag/
+setenv MODPATH ${DIAGROOTPATH}/sourcemods
+setenv NCLPATH ${DIAGROOTPATH}/ncl_lib
+setenv IDLPATH ${DIAGROOTPATH}/idl_lib
+setenv TOOLPATH ${DIAGROOTPATH}/tool_lib
+setenv HTMLPATH ${DIAGROOTPATH}/html_lib
+#setenv WORKDIR /lfs/home/lama/work/taiesm_diag/pop_diag/diag_archive/${CASE}-${CNTRLCASE}.${YEAR0}-${YEAR1}
+setenv WORKDIR /lfs/home/yihsuanc/test/j1-modified_Ke_Sc_top/pop2_diag/diag_archive/${CASE}_vs_${CNTRLCASE}.${YEAR0}-${YEAR1}
+setenv PATH ${MODPATH}:${TOOLPATH}:${PATH}
+#setenv PATH ${TOOLPATH}:${PATH}
+#setenv PATH ${MODPATH}:${TOOLPATH}:${PATH}:/fs/local/bin
+
+#----------------- SET OBS INFO -------------------------------#
+setenv PDATA /lfs/home/lama/work/taiesm_diag/pop_diag/OBS_DATA/pop_obs_data_20100719
+if ($CPL == 7) then
+  setenv FLUXOBSDIR ${PDATA}/CCSM4_special/fluxes/Data/a.b27.03
+setenv FLUXOBSFILE a.b27.03.mean.1984-2006.nc
+else
+setenv FLUXOBSDIR ${PDATA}/fluxes/TN460
+setenv FLUXOBSFILE gx1v3.020.clim.1984-2000.nc
+endif
+setenv WINDOBSDIR ${PDATA}/fluxes/QSCAT
+setenv WINDOBSFILE gx1v3.022.clim.2000-2004.nc
+setenv SSHOBSDIR ${PDATA}/ssh
+setenv SSHOBSFILE 1992-2002MDOT060401.${RESOLUTION}.nc
+setenv SSTOBSDIR ${PDATA}/sst
+setenv SSTOBSFILE roisst.nc
+setenv TSOBSDIR ${PDATA}/phc
+setenv TOBSFILE PHC2_TEMP_${RESOLUTION}_ann_avg.nc
+setenv SOBSFILE PHC2_SALT_${RESOLUTION}_ann_avg.nc
+setenv TOGATAODIR ${PDATA}/johnson_pmel
+setenv TOGATAOFILE meanfit_m.nc
+setenv RHOOBSDIR ${PDATA}/phc
+setenv RHOOBSFILE PHC2_RHO0_${RESOLUTION}.nc
+
+#----------------- SET NCL INFO -------------------------------#
+setenv NCARG_ROOT /lfs/opt/ncl-6.2.1_gcc-4.8.5
+setenv NCARG_COLORMAP_PATH $NCLPATH/colormaps:$NCARG_ROOT/lib/ncarg/colormaps
+setenv PATH ${MODPATH}:${TOOLPATH}:${PATH}:{$WORKDIR}
+#setenv PATH ~/src/NCL_TRUNK/ni/src/ncl:$NCARG_ROOT/bin:$PATH
+
+#----------------- SET IDL INFO -------------------------------#
+setenv IDLCOLORTABLEFILE ${IDLPATH}/colortables/colors1.tbl
+setenv IDLCOLORTABLE 42		
+setenv IDLMINCOLOR 1
+setenv IDLMAXCOLOR 254
+setenv IDLLNDCOLOR 255
+
+#--------------------------------------------------------------#
+#----------------- END USER DEFINED SETTINGS ------------------#
+#--------------------------------------------------------------#
+set yr0 = `printf "%04d" $YEAR0`
+set yr1 = `printf "%04d" $YEAR1`
+echo $yr0 $yr1
+
+set cntrlyr0 = `printf "%04d" $CNTRLYEAR0`
+set cntrlyr1 = `printf "%04d" $CNTRLYEAR1`
+echo $cntrlyr0 $cntrlyr1
+
+setenv NEED_CLIM 0
+if ($PM_SEAS == 1) setenv NEED_CLIM 1
+if ($PM_MLD == 1) setenv NEED_CLIM 1
+
+
+if !(-d ${WORKDIR}) mkdir -p ${WORKDIR} 
+cd ${WORKDIR} 
+# === control data will be generated below ===
+# The original version linked pre-existing CNTRL diagnostic files from:
+#   ${DIAGROOTPATH}/diag_archive/${CNTRLCASE}.${CNTRLYEAR0}-${CNTRLYEAR1}/
+# This revised version generates both CASE and CNTRLCASE netCDF files in WORKDIR.
+# The CNTRL annual/time-mean and zonal-mean files keep the names expected by
+# the diff NCL scripts:
+#   tavg.${CNTRLYEAR0}.${CNTRLYEAR1}.cntrl.nc
+#   za_tavg.${CNTRLYEAR0}.${CNTRLYEAR1}.cntrl.nc
+
+\rm -f *.pro  *.gif *.dat *.ps
+
+if ($DOWEB == 1) then
+  @ dlon = ($xyrange[2] - $xyrange[1])
+  @ dlat = ($xyrange[4] - $xyrange[3])
+  if ($dlon == 360 && $dlat == 180) then
+    set tail = global
+  else
+    set tail = ${xyrange[1]}to${xyrange[2]}E.${xyrange[3]}to${xyrange[4]}N
+  endif
+  setenv WEBDIR ${WEBDIR2}.${tail}
+# ssh -n ${WEBMACH} "if !(-d ${WEBDIR1}) mkdir -p -m 0775 ${WEBDIR1}"
+# ssh -n ${WEBMACH} "if !(-d ${WEBDIR}) mkdir -p -m 0775 ${WEBDIR}"
+  if ($APPEND == 1) then 
+    scp ${WEBMACH}:${WEBDIR}/popdiag.html . && removefooter.csh popdiag.html
+  else
+    svn info $DIAGROOTPATH > tmp
+    setenv POPDIAGREV "`sed -n '/Revision/p' tmp`" && \rm -f tmp
+    echo "running popdiag $POPDIAGREV"
+    sed "s/CASENAME/${CASE}/g" ${HTMLPATH}/diffheader.html > tmp.html
+    sed "s/CNTRLCASE/${CNTRLCASE}/g" tmp.html > popdiag.html
+    sed "s/REVISION/${POPDIAGREV}/g" popdiag.html > tmp.html 
+    mv -f tmp.html popdiag.html
+  endif
+endif
+
+####################  Generate needed netcdfs 
+
+setenv SEASAVGTEMP ${CASE}.pop.h.TEMP.mavg_${yr0}-${yr1}.nc
+setenv SEASAVGSALT ${CASE}.pop.h.SALT.mavg_${yr0}-${yr1}.nc
+setenv CNTRLSEASAVGTEMP ${CNTRLCASE}.pop.h.TEMP.mavg_${cntrlyr0}-${cntrlyr1}.nc
+setenv CNTRLSEASAVGSALT ${CNTRLCASE}.pop.h.SALT.mavg_${cntrlyr0}-${cntrlyr1}.nc
+
+setenv NEED_CLIM_EXP 0
+setenv NEED_CLIM_CNTRL 0
+if ($NEED_CLIM == 1) then
+ if !(-e $SEASAVGTEMP && -e $SEASAVGSALT) setenv NEED_CLIM_EXP 1
+ if !(-e $CNTRLSEASAVGTEMP && -e $CNTRLSEASAVGSALT) setenv NEED_CLIM_CNTRL 1
+endif
+
+setenv NEEDTAVG 0
+if !(-e $TAVGFILE) setenv NEEDTAVG 1
+echo "NEED_CLIM_EXP="$NEED_CLIM_EXP" NEEDTAVG="$NEEDTAVG
+
+#lama fixed
+#setenv $NEED_CLIM $NEED_CLIM_EXP
+if ($NEED_CLIM_EXP == 1 || $NEEDTAVG == 1) then
+ if ($datafile_type_gz == 1) then  # kilmer
+   gen_mavg_annmean.csh $MSROOT $CASE $YEAR0 $YEAR1 $TAVGFILE TEMP SALT
+ else if ($datafile_type_gz == 2) then
+   gen_mavg_annmean_targz.csh $MSROOT $CASE $YEAR0 $YEAR1 $TAVGFILE TEMP SALT   ## kilmer
+ else
+   gen_mavg_annmean_nogz.csh $MSROOT $CASE $YEAR0 $YEAR1 $TAVGFILE TEMP SALT
+ endif
+endif
+
+#----------------- Generate needed netcdfs for CNTRLCASE -----------------#
+# CNTRLFILE is the annual/time-mean control file used by the *_diff.ncl scripts.
+# CNTRLSEASAVG* are monthly climatology files needed by seasonal-cycle and MLD modules.
+setenv NEEDTAVG_CNTRL 0
+if !(-e $CNTRLFILE) setenv NEEDTAVG_CNTRL 1
+echo "NEED_CLIM_CNTRL="$NEED_CLIM_CNTRL" NEEDTAVG_CNTRL="$NEEDTAVG_CNTRL
+
+# Generate control monthly climatologies and/or annual mean when they are missing.
+# This mirrors the experiment-case block above, but uses CNTRLMSROOT/CNTRLCASE/CNTRLYEAR*.
+# IMPORTANT: CNTRLFILE intentionally includes the .cntrl.nc suffix so the generated
+# annual control file has the same name previously produced by the symbolic link.
+if ($NEED_CLIM_CNTRL == 1 || $NEEDTAVG_CNTRL == 1) then
+ if ($datafile_type_gz == 1) then  # *.nc.gz files
+   gen_mavg_annmean.csh $CNTRLMSROOT $CNTRLCASE $CNTRLYEAR0 $CNTRLYEAR1 $CNTRLFILE TEMP SALT
+ else if ($datafile_type_gz == 2) then  # *.nc.tar.gz files
+   gen_mavg_annmean_targz.csh $CNTRLMSROOT $CNTRLCASE $CNTRLYEAR0 $CNTRLYEAR1 $CNTRLFILE TEMP SALT
+ else  # *.nc files
+   gen_mavg_annmean_nogz.csh $CNTRLMSROOT $CNTRLCASE $CNTRLYEAR0 $CNTRLYEAR1 $CNTRLFILE TEMP SALT
+ endif
+endif
+
+# Generate the zonal-mean control file if it is needed and not already present.
+# Several diff plot modules expect za_$CNTRLFILE to exist.
+setenv CNTRL_ZAFILE za_$CNTRLFILE
+setenv NEED_ZA_CNTRL 0
+if ( ($PM_SFC2D == 1 || $PM_FLD2D == 1) && !(-e $CNTRL_ZAFILE) ) setenv NEED_ZA_CNTRL 1
+echo "NEED_ZA_CNTRL="$NEED_ZA_CNTRL" CNTRL_ZAFILE="$CNTRL_ZAFILE
+
+if ($NEED_ZA_CNTRL == 1) then
+  za -O -time_const $CNTRLFILE
+endif
+
+##==> generate a plot data file 
+##   which contains general plot information available
+##   to any of the plot module routines via ascii read.
+echo $xyrange >! plot.dat
+echo $#depths >> plot.dat
+echo $depths >> plot.dat
+
+####################  plot modules
+##==> surface flux fields
+if ($PM_SFC2D == 1) then
+  if ($DOWEB == 1) cat ${HTMLPATH}/sfcflx.html >> popdiag.html
+  addtowrapper.csh ncl sfcflx_diff.ncl ncl_wrap.pro 
+  addtowrapper.csh ncl sfcflx_za_diff.ncl ncl_wrap.pro 
+  if !(-e za_$TAVGFILE) za -O -time_const $TAVGFILE
+  if !(-e za_$CNTRLFILE) za -O -time_const $CNTRLFILE
+endif
+
+##==> 2D (surface) fields
+if ($PM_FLD2D == 1) then
+  if ($DOWEB == 1) cat ${HTMLPATH}/field_2d.html >> popdiag.html
+  addtowrapper.csh ncl field_2d_diff.ncl ncl_wrap.pro 
+  addtowrapper.csh ncl field_2d_za_diff.ncl ncl_wrap.pro 
+  if !(-e za_$TAVGFILE) za -O -time_const $TAVGFILE
+  if !(-e za_$CNTRLFILE) za -O -time_const $CNTRLFILE
+endif
+
+##==> 3D fields (zonal average)
+if ($PM_FLD3DZA == 1) then
+  if ($DOWEB == 1) cat ${HTMLPATH}/field_3d_za.html >> popdiag.html
+  addtowrapper.csh ncl field_3d_za_diff.ncl ncl_wrap.pro
+endif
+
+##==> MOC & Heat/Freshwater transport plots
+if ($PM_MOC == 1) then
+  if ($DOWEB == 1) cat ${HTMLPATH}/moc.html >> popdiag.html
+  addtowrapper.csh ncl moc_netcdf_diff.ncl ncl_wrap.pro
+endif
+
+##==> All seasonal plots
+if ($PM_SEAS == 1) then
+  setenv SEASAVGFILE ${SEASAVGTEMP}
+  setenv CNTRLSEASAVGFILE ${CNTRLSEASAVGTEMP}
+  if ($DOWEB == 1) cat ${HTMLPATH}/seasonal.html >> popdiag.html
+  addtowrapper.csh ncl sst_eq_pac_seasonal_cycle_diff.ncl ncl_wrap.pro
+  ln -sf ${SSTOBSDIR}/${SSTOBSFILE} .
+endif
+
+if ($PM_MLD == 1) then
+  setenv IDL_COLOR_FILE /fis/cgd/oce/gokhan/home/bin/idl_src/colors1.tbl  
+  if ($DOWEB == 1) cat ${HTMLPATH}/mld.html >> popdiag.html
+  setenv SEASAVGRHO  ${CASE}.pop.h.RHO.mavg_${yr0}-${yr1}.nc
+  setenv CNTRLSEASAVGRHO  ${CNTRLCASE}.pop.h.RHO.mavg_${cntrlyr0}-${cntrlyr1}.nc
+  if !(-e $SEASAVGRHO) then
+   addtowrapper.csh ncl compute_rho.ncl ncl_wrap.pro
+  endif
+  if !(-e $CNTRLSEASAVGRHO) then
+    addtowrapper.csh ncl compute_rho_cntl.ncl ncl_wrap.pro
+  endif
+  addtowrapper.csh ncl mld_diff.ncl ncl_wrap.pro
+endif
+
+##==> TEMP & SALT at depth levels
+if ($PM_TSZ == 1) then
+  if ($DOWEB == 1) then
+        setenv MODULETITLE 'T & S at depth'
+	gen_html_multivarz.csh 2 TEMP SALT 13 $depths
+        cat tmp.html >> popdiag.html && \rm tmp.html
+  endif
+  addtowrapper.csh ncl tempz_diff.ncl ncl_wrap.pro 
+  addtowrapper.csh ncl saltz_diff.ncl ncl_wrap.pro
+endif
+
+##==> Passive Tracers at depth levels
+if ($PM_PASSIVEZ == 1) then
+  if ($DOWEB == 1) then
+        setenv MODULETITLE 'Passive Tracers at depth'
+	gen_html_multivarz.csh 1 IAGE 13 $depths
+        cat tmp.html >> popdiag.html && \rm tmp.html
+  endif
+  addtowrapper.csh ncl iagez_diff.ncl ncl_wrap.pro
+endif
+
+##==> Eulerian velocity at depth levels
+if ($PM_VELZ == 1) then
+  if ($DOWEB == 1) then
+        setenv MODULETITLE 'Eulerian Velocity Components at depth'
+	gen_html_multivarz.csh 3 UVEL VVEL WVEL 13 $depths
+        cat tmp.html >> popdiag.html && \rm tmp.html
+  endif
+  addtowrapper.csh ncl uvelz_diff.ncl ncl_wrap.pro
+  addtowrapper.csh ncl vvelz_diff.ncl ncl_wrap.pro
+  addtowrapper.csh ncl wvelz_diff.ncl ncl_wrap.pro
+endif
+
+##==> Bolus velocity at depth levels
+if ($PM_VELISOPZ == 1) then
+  if ($DOWEB == 1) then
+        setenv MODULETITLE 'Bolus Velocity Components at depth'
+	gen_html_multivarz.csh 3 UISOP VISOP WISOP 13 $depths
+        cat tmp.html >> popdiag.html && \rm tmp.html
+  endif
+  addtowrapper.csh ncl uisopz_diff.ncl ncl_wrap.pro
+  addtowrapper.csh ncl visopz_diff.ncl ncl_wrap.pro
+  addtowrapper.csh ncl wisopz_diff.ncl ncl_wrap.pro
+endif
+
+##==> Diffusion Coefficients at depth levels
+if ($PM_KAPPAZ == 1) then
+  if ($DOWEB == 1) then
+        setenv MODULETITLE 'Diffusion Coefficients at depth'
+	gen_html_multivarz.csh 2 KAPPA_ISOP KAPPA_THIC 13 $depths
+        cat tmp.html >> popdiag.html && \rm tmp.html
+  endif
+  addtowrapper.csh ncl kappa_isopz_diff.ncl ncl_wrap.pro
+  addtowrapper.csh ncl kappa_thicz_diff.ncl ncl_wrap.pro
+endif
+
+##==> Upperocean at the Equator; compared to PHC2, TOGA-TAO
+if ($PM_UOEQ == 1) then
+  if ($DOWEB == 1) cat ${HTMLPATH}/eq_upperocean.html >> popdiag.html
+  addtowrapper.csh ncl T_eq_diff.ncl ncl_wrap.pro
+  addtowrapper.csh ncl S_eq_diff.ncl ncl_wrap.pro
+  addtowrapper.csh ncl U_eq_diff.ncl ncl_wrap.pro
+  addtowrapper.csh ncl U_eq_meridional_diff.ncl ncl_wrap.pro
+  addtowrapper.csh ncl T_eq_meridional_diff.ncl ncl_wrap.pro
+  addtowrapper.csh ncl S_eq_meridional_diff.ncl ncl_wrap.pro
+  addtowrapper.csh ncl PD_eq_meridional_diff.ncl ncl_wrap.pro
+  ln -sf ${TOGATAODIR}/${TOGATAOFILE} .
+endif
+
+
+
+####################  Call analysis tools for plotting here
+if ($DOPLOTS == 1) then
+
+  if (-e idl_wrap.pro) then
+    mv idl_wrap.pro tmp.pro
+    echo "@$IDLPATH/pro/set_path" >> idl_wrap.pro
+    cat tmp.pro >> idl_wrap.pro && \rm tmp.pro
+    echo "exit" >> idl_wrap.pro
+    idl idl_wrap.pro
+    ls *.ps
+    if ($status == 0) then
+      foreach i (*.ps)
+        ps2gif $i $i.gif
+        rename.pl '.ps' '' $i.gif
+      end
+      \rm -f *.ps
+    endif
+  endif
+
+  if (-e ncl_wrap.pro) then
+   cat ncl_wrap.pro
+   foreach i (`cat ncl_wrap.pro`)
+#    foreach i (/lfs/home/lama/work/taiesm_diag/pop_diag/ncl_lib/sfcflx_za_diff.ncl)
+      ncl $i
+#exit
+    end
+    ls *.ps
+    if ($status == 0) then
+      foreach i (*.ps)
+        convert -trim -bordercolor white -border 5x5 -density 300 $i $i.gif
+        rename.pl '.ps' '' $i.gif
+      end
+      \rm -f *.ps
+    endif
+  endif
+
+  if (-e matlab_wrap.pro) then
+    matlab matlab_wrap.pro
+  endif
+
+  if (-e fer_wrap.pro) then
+    echo "exit" >> fer_wrap.pro
+    ${FER_DIR}/bin/ferret -gif < fer_wrap.pro
+  endif
+
+endif
+
+####################  Finish & transfer web page and plots
+if ($DOWEB == 1) then
+  if ($GLOSSARY == 1) cat ${HTMLPATH}/glossary.html >> popdiag.html
+  cat ${HTMLPATH}/footer.html >> popdiag.html
+#  scp popdiag.html ${WEBMACH}:${WEBDIR}
+
+  if ($DOPLOTS == 1) then
+#    scp *.gif *.png ${WEBMACH}:${WEBDIR}
+  endif
+endif
+mv popdiag.html index.html
+echo "DONE popdiagdiff.csh:  CASE = $CASE, CNTRLCASE = $CNTRLCASE"
