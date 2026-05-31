@@ -1280,7 +1280,7 @@ contains
     call outfld( 'rh_pre_PBL   ', ftem_prePBL,               pcols, lchnk )
 
     !<--- yhc1113
-    call get_inputs_vdiff_offline ( lchnk, state, ncol, kvh, pblh, kpblh, cldn,      &
+    call get_inputs_vdiff_offline ( lchnk, state, ncol, kvh, pblh, kpblh, cldn, landfrac,     &
                                     do_modify_cldtop_props, s_off, q_off, u_off, v_off, kvh_off, &
                                     s_offMstate, q_offMstate, u_offMstate, v_offMstate, &
                                     sl_pre_PBL_off, qt_pre_PBL_off, ftem_pre_PBL_off &
@@ -2276,7 +2276,7 @@ contains
 !  !---> yhc1113
 
   !<--- yhc1113, prepare input fields for vdiff offline calculations 
-  subroutine get_inputs_vdiff_offline ( lchnk, state, ncol, kvh, pblh, kpblh, cldn, &
+  subroutine get_inputs_vdiff_offline ( lchnk, state, ncol, kvh, pblh, kpblh, cldn, landfrac,&
                                         do_modify_cldtop_props, s_off, q_off, u_off, v_off, kvh_off, &
                                         s_offMstate, q_offMstate, u_offMstate, v_offMstate, & 
                                         sl_pre_PBL_off, qt_pre_PBL_off, ftem_pre_PBL_off    & 
@@ -2301,6 +2301,8 @@ contains
                                                            ! In the UW scheme, pblh is the surface-driven BL uppermost interface
                                                            ! height. For instance, pblh=zint(k=28), kpblh = k-1 = 27
     real(r8),            intent(in)  :: cldn(pcols,pver)          ! New stratus fraction [ fraction ]
+
+    real(r8),            intent(in)  :: landfrac(pcols)           ! Land fraction
 
     integer,  intent(in)  :: do_modify_cldtop_props    ! modify s & q of the layer just above the cloud layer
                                                        ! 0: remain the same, do not do any changes
@@ -2329,8 +2331,9 @@ contains
     !--------------------------------------------------------------------
     ! Local variables
     !--------------------------------------------------------------------
-    integer, parameter :: option_kt = 1  ! use the cloup top as the level to do modified entrainment flux
+    !integer, parameter :: option_kt = 1  ! use the cloup top as the level to do modified entrainment flux
     !integer, parameter :: option_kt = 2  ! use pbl top as the level to do modified entrainment flux
+    integer, parameter :: option_kt = 3  ! use the cloup top as the level to do modified entrainment to ONLY ocean grids
 
     !logical :: do_print_out = .true.
     logical :: do_print_out = .false.
@@ -2349,9 +2352,10 @@ contains
     real(r8) :: s_tmp0, sl_pblh, qt_pblh
     real(r8) :: tem2(pcols,pver)                                    ! Saturation specific humidity and RH
 
-    real(r8), parameter :: ql_thresh   = 1.e-6_r8   ! kg/kg
-    real(r8), parameter :: kvh_thresh  = 1.e-2_r8   ! m2/s (avoid floating noise)
-    real(r8), parameter :: cldn_thresh = 0.5_r8     ! fraction
+    real(r8), parameter :: ql_thresh       = 1.e-6_r8   ! kg/kg
+    real(r8), parameter :: kvh_thresh      = 1.e-2_r8   ! m2/s (avoid floating noise)
+    real(r8), parameter :: cldn_thresh     = 0.5_r8     ! fraction
+    real(r8), parameter :: landfrac_thresh = 0.5_r8     ! fraction
  
     logical :: l_monotonic, l_extrap_ok, l_kt
 
@@ -2425,6 +2429,16 @@ contains
       elseif (option_kt .eq. 2) then
         kt = int(kpblh(i)) + 1
         if (kt > 3 .and. kt < pver+1) l_kt = .true.
+
+      elseif (option_kt .eq. 3) then
+
+        kt = int(kpblh(i)) + 1
+        if (      kt > 3 .and. kt < pver+1            &
+            .and. landfrac(i)            < landfrac_thresh  &
+            .and. state%q(i,kt,ixcldliq) > ql_thresh  &
+            .and. cldn   (i,kt)          > cldn_thresh) then
+          l_kt = .true.
+        endif
       
       else
         call endrun('get_inputs_vdiff_offline : option_kt is not supported')
