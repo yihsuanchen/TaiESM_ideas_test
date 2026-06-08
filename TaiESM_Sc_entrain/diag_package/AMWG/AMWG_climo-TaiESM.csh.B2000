@@ -110,15 +110,16 @@ module load nco_netcdf-4.9.1_gcc-10.3.1/ ncl_gcc-4.8.5/
 # Don t forget the trailing / when setting the paths
 set PWD = `pwd`
 
-set test_first_yr =   6 
+set test_first_yr =   1 
 set test_nyrs     =   5 
 set test_last_yr = `expr $test_first_yr + $test_nyrs - 1`
 set string_years = yr${test_first_yr}_${test_last_yr}
 
 #set test_casename = q1-taiesm1_modified_Ke_Sc_top_sl.F_2000_TAI.f09_f09.0330_1627
 #set test_casename = q1-taiesm1_CTL.F_2000_TAI.f09_f09.0330_1612
-set test_casename = q2-taiesm1_modified_Ke_Sc_top_sl_kt1_cldtop.B_2000_TAI.f09_g16.0516_0552
+#set test_casename = q2-taiesm1_modified_Ke_Sc_top_sl_kt1_cldtop.B_2000_TAI.f09_g16.0516_0552
 #set test_casename = q2-taiesm1_modified_Ke_Sc_top_sl_kt2_pbltop.B_2000_TAI.f09_g16.0422_1417
+set test_casename = q2-taiesm1_modified_Ke_Sc_top_sl_kt3_cldtop_ocn.B_2000_TAI.f09_g16.0604_1108
 set test_filetype = monthly_history 
 #set test_filetype = time_series
 
@@ -177,11 +178,11 @@ set cntl_path_HPSS    = /CCSM/csm/${cntl_casename}/atm/hist/
 #-----------------------------------------------------------------
 # Turn on/off the computation of climatologies 
 
-#set test_compute_climo = 0    # (0=ON,1=OFF) 
-#set cntl_compute_climo = 1    # (0=ON,1=OFF) 
-      
 set test_compute_climo = 0    # (0=ON,1=OFF) 
-set cntl_compute_climo = 0    # (0=ON,1=OFF) 
+set cntl_compute_climo = 1    # (0=ON,1=OFF) 
+      
+#set test_compute_climo = 0    # (0=ON,1=OFF) 
+#set cntl_compute_climo = 0    # (0=ON,1=OFF) 
 
 #set test_compute_climo = 1    # (0=ON,1=OFF) 
 #set cntl_compute_climo = 1    # (0=ON,1=OFF) 
