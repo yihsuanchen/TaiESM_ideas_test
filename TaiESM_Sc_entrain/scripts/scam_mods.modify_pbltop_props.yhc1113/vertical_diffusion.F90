@@ -2331,9 +2331,17 @@ contains
     !--------------------------------------------------------------------
     ! Local variables
     !--------------------------------------------------------------------
-    !integer, parameter :: option_kt = 1  ! use the cloup top as the level to do modified entrainment flux
-    !integer, parameter :: option_kt = 2  ! use pbl top as the level to do modified entrainment flux
-    integer, parameter :: option_kt = 3  ! use the cloup top as the level to do modified entrainment to ONLY ocean grids
+
+    ! option_kt
+    ! =1, modified entrainment flux when ql > 10-6 kg/kg & cloud fraction > 0.5 at the top of the mixed layer, regardless of on land or ocean.
+    ! =2, modified entrainment flux for all types of boundary layer, regardless of clear sky or cloudy, and on land or ocean.
+    ! =3, Same as 1, but only on ocean grids
+    ! =4, Same as 1, but only on Southeast Pacific marine Sc region (0-30S, 70W-100W)
+
+    !integer, parameter :: option_kt = 1  
+    !integer, parameter :: option_kt = 2  
+    !integer, parameter :: option_kt = 3  
+    integer, parameter :: option_kt = 4
 
     !logical :: do_print_out = .true.
     logical :: do_print_out = .false.
@@ -2356,6 +2364,8 @@ contains
     real(r8), parameter :: kvh_thresh      = 1.e-2_r8   ! m2/s (avoid floating noise)
     real(r8), parameter :: cldn_thresh     = 0.5_r8     ! fraction
     real(r8), parameter :: landfrac_thresh = 0.5_r8     ! fraction
+
+    real(r8) :: lon_min_SEP, lon_max_SEP, lat_min_SEP, lat_max_SEP
  
     logical :: l_monotonic, l_extrap_ok, l_kt
 
@@ -2380,6 +2390,12 @@ contains
 
     sl_off(:ncol,:pver)  = s_off(:ncol,:) -   latvap * q_off(:ncol,:,ixcldliq) &
                                           - ( latvap + latice) * q_off(:ncol,:,ixcldice)
+
+    ! Northeast Pacific marine Sc: 20-30N, 110W-150W  
+    ! Southeast Pacific marine Sc: 0-30S, 70W-100W
+    ! Southeast Atlantic marine Sc: 0-30S, 10W-10E
+    lon_min_SEP = degrees_to_radians(-100._r8,"lon") ; lon_max_SEP = degrees_to_radians( -70._r8,"lon")
+    lat_min_SEP = degrees_to_radians( -30._r8,"lat") ; lat_max_SEP = degrees_to_radians(   0._r8,"lat")
 
     !-------------------------
     ! loop over each column
@@ -2430,10 +2446,25 @@ contains
         kt = int(kpblh(i)) + 1
         if (kt > 3 .and. kt < pver+1) l_kt = .true.
 
+      !--- 
       elseif (option_kt .eq. 3) then
 
         kt = int(kpblh(i)) + 1
         if (      kt > 3 .and. kt < pver+1            &
+            .and. landfrac(i)            < landfrac_thresh  &
+            .and. state%q(i,kt,ixcldliq) > ql_thresh  &
+            .and. cldn   (i,kt)          > cldn_thresh) then
+          l_kt = .true.
+        endif
+
+      !--- 
+      elseif (option_kt .eq. 4) then
+
+        kt = int(kpblh(i)) + 1
+        if (do_print_out) write(iulog,*) 'i, lon,lat', i, state%lon(i), state%lat(i)
+        if (      kt > 3 .and. kt < pver+1            &
+            .and. state%lon(i).ge.lon_min_SEP .and. state%lon(i).lt.lon_max_SEP  &
+            .and. state%lat(i).ge.lat_min_SEP .and. state%lat(i).lt.lat_max_SEP  &
             .and. landfrac(i)            < landfrac_thresh  &
             .and. state%q(i,kt,ixcldliq) > ql_thresh  &
             .and. cldn   (i,kt)          > cldn_thresh) then
@@ -2881,6 +2912,39 @@ subroutine compute_tend_vdiff_offline(lchnk, state, ncol, ztodt, rztodt,        
 
 
   end subroutine compute_tend_vdiff_offline
+
+  function degrees_to_radians(degree,opt_latlon)
+    use physconst,          only : pi
+  ! convert degress (N,E,W) to radians
+    real(r8) :: degrees_to_radians
+    real(r8) :: degree, degree_work, radian
+    character*3 :: opt_latlon
+  !----------------------
+    radian = -999.99
+  
+    !--- input degree is longitude
+    if (opt_latlon.eq."lon") then
+  
+      if (degree.lt.0.) then   ! degrees_W
+        degree_work = 360. + degree
+      else
+        degree_work = degree
+      end if
+  
+      radian = degree_work/360. * 2.*pi
+  
+    !--- input degree is latitude
+    elseif (opt_latlon.eq."lat") then
+      degree_work = degree
+      radian = degree_work/360. * 2.*pi
+  
+    endif
+  
+    degrees_to_radians = radian
+
+  end function degrees_to_radians
+
+
   !<--- yhc1113
 
 
