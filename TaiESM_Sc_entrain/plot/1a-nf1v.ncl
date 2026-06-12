@@ -67,6 +67,7 @@ begin
   ;opt_infiles = "B2000_with_CTL_1"
   ;opt_infiles = "B2000_with_CTL_2"
 
+  ;opt_infiles = "B2000_CTL_yrs"
   opt_infiles = "B2000_with_CTL_2_yrs"
   ;opt_infiles = "B2000_with_CTL_2_yrs.test01"
     proc_years = ".yr1_5"
@@ -187,10 +188,10 @@ begin
     infilenames = (/  \
                  "../diag_archive/climo/q2-taiesm1_modified_Ke_Sc_top_sl_kt1_cldtop.B_2000_TAI.f09_g16.0516_0552/q2-taiesm1_modified_Ke_Sc_top_sl_kt1_cldtop.B_2000_TAI.f09_g16.0516_0552_"+plotname_step+"_climo.nc", \
                  "../diag_archive/climo/q2-taiesm1_modified_Ke_Sc_top_sl_kt2_pbltop.B_2000_TAI.f09_g16.0422_1417/q2-taiesm1_modified_Ke_Sc_top_sl_kt2_pbltop.B_2000_TAI.f09_g16.0422_1417_"+plotname_step+"_climo.nc",  \
-                  "../diag_archive/climo/f09.B2000.ft13/f09.B2000.ft13_"+plotname_step+"_climo.nc" /)
+                  "../diag_archive/climo/f09.B2000.ft13.yr71_100/f09.B2000.ft13_"+plotname_step+"_climo.nc" /)
 ;
     suffixes = infilenames
-    suffixes = (/"mod_Ke_cldtop_coupled", "mod_Ke_pbltop_coupled","CTL_coupled"/)
+    suffixes = (/"mod_Ke_cldtop_coupled", "mod_Ke_pbltop_coupled","CTL_coupled_yr71_100"/)
     plotname_head = "fig_wCTL2_B2000-"
 
   elseif (opt_infiles .eq. "wo_CTL") then
@@ -211,11 +212,29 @@ begin
                  "../diag_archive/climo/q2-taiesm1_modified_Ke_Sc_top_sl_kt1_cldtop.B_2000_TAI.f09_g16.0516_0552"+proc_years+"/q2-taiesm1_modified_Ke_Sc_top_sl_kt1_cldtop.B_2000_TAI.f09_g16.0516_0552_"+plotname_step+"_climo.nc", \
                  "../diag_archive/climo/q2-taiesm1_modified_Ke_Sc_top_sl_kt3_cldtop_ocn.B_2000_TAI.f09_g16.0604_1108"+proc_years+"/q2-taiesm1_modified_Ke_Sc_top_sl_kt3_cldtop_ocn.B_2000_TAI.f09_g16.0604_1108_"+plotname_step+"_climo.nc",  \
                  "../diag_archive/climo/q2-taiesm1_modified_Ke_Sc_top_sl_kt2_pbltop.B_2000_TAI.f09_g16.0422_1417"+proc_years+"/q2-taiesm1_modified_Ke_Sc_top_sl_kt2_pbltop.B_2000_TAI.f09_g16.0422_1417_"+plotname_step+"_climo.nc",  \
-                 "../diag_archive/climo/f09.B2000.ft13"+proc_years+"/f09.B2000.ft13_"+plotname_step+"_climo.nc" /)
+                 "../diag_archive/climo/q2-taiesm1_modified_Ke_Sc_top_sl_kt4_cldtop_SEP.B_2000_TAI.f09_g16.0610_1301"+proc_years+"/q2-taiesm1_modified_Ke_Sc_top_sl_kt4_cldtop_SEP.B_2000_TAI.f09_g16.0610_1301_"+plotname_step+"_climo.nc",  \
+                 "../diag_archive/climo/f09.B2000.ft13"+proc_years+"/f09.B2000.ft13_"+plotname_step+"_climo.nc",  \
+                 "../diag_archive/climo/q1-taiesm1_CTL.B_2000_TAI.f09_g16.0611_0929"+proc_years+"/q1-taiesm1_CTL.B_2000_TAI.f09_g16.0611_0929_"+plotname_step+"_climo.nc" /)
 ;
     suffixes = infilenames
-    suffixes = (/"mod_Ke_cldtop_coupled"+proc_years, "mod_Ke_cldtop_ocn_coupled"+proc_years, "mod_Ke_pbltop_coupled"+proc_years, "CTL_coupled"+proc_years/)
+    suffixes = (/"mod_Ke_cldtop_coupled"+proc_years, "mod_Ke_cldtop_ocn_coupled"+proc_years, "mod_Ke_pbltop_coupled"+proc_years, "mod_Ke_cldtop_SEP_coupled"+proc_years, "CTL_ft13_coupled"+proc_years, "CTL_0611_coupled"+proc_years/)
     plotname_head = "fig_wCTL2_B2000"+proc_years+"-"
+
+  ;#######################
+  ;#######################
+  elseif (opt_infiles .eq. "B2000_CTL_yrs") then
+                 ;"../diag_archive/climo/f09.B2000.ft13"+proc_years+"/f09.B2000.ft13_"+plotname_step+"_climo.nc"  /)
+    infilenames = (/  \
+                 "../diag_archive/climo/f09.B2000.ft13"+proc_years+"/f09.B2000.ft13_"+plotname_step+"_climo.nc", \
+                 "../diag_archive/climo/f09.B2000.ft13.yr6_35/f09.B2000.ft13_"+plotname_step+"_climo.nc", \
+                 "../diag_archive/climo/f09.B2000.ft13.yr71_100/f09.B2000.ft13_"+plotname_step+"_climo.nc" /)
+;
+    suffixes = infilenames
+    suffixes = (/"f09.B2000.ft13"+proc_years, "f09.B2000.ft13.yr6_35", "f09.B2000.ft13.yr71_100"/)
+    ;suffixes = (/"B2000_yhc0610"+proc_years, "f09.B2000.ft13"+proc_years, "f09.B2000.ft13.yr6_35", "f09.B2000.ft13.yr71_100"/)
+    ;suffixes = (/"B2000_yhc0610"+proc_years, "f09.B2000.ft13"+proc_years/)
+
+    plotname_head = "fig_B2000_CTL_yrs"+proc_years+"-"
 
   ;#######################
   ;#######################
@@ -225,11 +244,12 @@ begin
     infilenames = (/  \
                  "../diag_archive/climo/q2-taiesm1_modified_Ke_Sc_top_sl_kt1_cldtop.B_2000_TAI.f09_g16.0516_0552"+proc_years+"/q2-taiesm1_modified_Ke_Sc_top_sl_kt1_cldtop.B_2000_TAI.f09_g16.0516_0552_"+plotname_step+"_climo.nc", \
                  "../diag_archive/climo/q2-taiesm1_modified_Ke_Sc_top_sl_kt3_cldtop_ocn.B_2000_TAI.f09_g16.0604_1108"+proc_years+"/q2-taiesm1_modified_Ke_Sc_top_sl_kt3_cldtop_ocn.B_2000_TAI.f09_g16.0604_1108_"+plotname_step+"_climo.nc",  \
+                 "../diag_archive/climo/q2-taiesm1_modified_Ke_Sc_top_sl_kt4_cldtop_SEP.B_2000_TAI.f09_g16.0610_1301"+proc_years+"/q2-taiesm1_modified_Ke_Sc_top_sl_kt4_cldtop_SEP.B_2000_TAI.f09_g16.0610_1301_"+plotname_step+"_climo.nc",  \
                  "../diag_archive/climo/q2-taiesm1_modified_Ke_Sc_top_sl_kt2_pbltop.B_2000_TAI.f09_g16.0422_1417"+proc_years+"/q2-taiesm1_modified_Ke_Sc_top_sl_kt2_pbltop.B_2000_TAI.f09_g16.0422_1417_"+plotname_step+"_climo.nc" /)
                  ;"../diag_archive/climo/f09.B2000.ft13"+proc_years+"/f09.B2000.ft13_"+plotname_step+"_climo.nc" /)
 ;
     suffixes = infilenames
-    suffixes = (/"mod_Ke_cldtop_coupled"+proc_years, "mod_Ke_cldtop_ocn_coupled"+proc_years, "mod_Ke_pbltop_coupled"+proc_years/)
+    suffixes = (/"mod_Ke_cldtop_coupled"+proc_years, "mod_Ke_cldtop_ocn_coupled"+proc_years, "mod_Ke_cldtop_SEP_coupled"+proc_years, "mod_Ke_pbltop_coupled"+proc_years/)
     plotname_head = "fig_wCTL2_B2000"+proc_years+"-"
 
   ;#######################
