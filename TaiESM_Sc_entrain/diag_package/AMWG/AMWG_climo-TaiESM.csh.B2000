@@ -119,7 +119,9 @@ set string_years = yr${test_first_yr}_${test_last_yr}
 #set test_casename = q1-taiesm1_CTL.F_2000_TAI.f09_f09.0330_1612
 #set test_casename = q2-taiesm1_modified_Ke_Sc_top_sl_kt1_cldtop.B_2000_TAI.f09_g16.0516_0552
 #set test_casename = q2-taiesm1_modified_Ke_Sc_top_sl_kt2_pbltop.B_2000_TAI.f09_g16.0422_1417
-set test_casename = q2-taiesm1_modified_Ke_Sc_top_sl_kt3_cldtop_ocn.B_2000_TAI.f09_g16.0604_1108
+#set test_casename = q2-taiesm1_modified_Ke_Sc_top_sl_kt3_cldtop_ocn.B_2000_TAI.f09_g16.0604_1108
+#set test_casename = q2-taiesm1_modified_Ke_Sc_top_sl_kt4_cldtop_SEP.B_2000_TAI.f09_g16.0610_1301
+set test_casename = q1-taiesm1_CTL.B_2000_TAI.f09_g16.0611_0929
 set test_filetype = monthly_history 
 #set test_filetype = time_series
 
