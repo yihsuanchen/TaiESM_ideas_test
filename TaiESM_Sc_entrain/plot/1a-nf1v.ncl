@@ -67,9 +67,10 @@ begin
   ;opt_infiles = "B2000_with_CTL_1"
   ;opt_infiles = "B2000_with_CTL_2"
 
-  ;opt_infiles = "B2000_CTL_yrs"
-  opt_infiles = "B2000_with_CTL_2_yrs"
+  opt_infiles = "B2000_CTL_yrs"
+  ;opt_infiles = "B2000_with_CTL_2_yrs"
   ;opt_infiles = "B2000_with_CTL_2_yrs.test01"
+  ;opt_infiles = "B2000_with_CTL_2_yrs.test02"
     proc_years = ".yr1_5"
     ;proc_years = ".yr6_10"
 
@@ -225,12 +226,15 @@ begin
   elseif (opt_infiles .eq. "B2000_CTL_yrs") then
                  ;"../diag_archive/climo/f09.B2000.ft13"+proc_years+"/f09.B2000.ft13_"+plotname_step+"_climo.nc"  /)
     infilenames = (/  \
+                 "../diag_archive/climo/f09_g16.B2000.landTest.chk01.yr1_5/f09_g16.B2000.landTest.chk01_"+plotname_step+"_climo.nc", \
+                 "../diag_archive/climo/q1-taiesm1_CTL.B_2000_TAI.f09_g16.0611_0929"+proc_years+"/q1-taiesm1_CTL.B_2000_TAI.f09_g16.0611_0929_"+plotname_step+"_climo.nc", \
                  "../diag_archive/climo/f09.B2000.ft13"+proc_years+"/f09.B2000.ft13_"+plotname_step+"_climo.nc", \
                  "../diag_archive/climo/f09.B2000.ft13.yr6_35/f09.B2000.ft13_"+plotname_step+"_climo.nc", \
                  "../diag_archive/climo/f09.B2000.ft13.yr71_100/f09.B2000.ft13_"+plotname_step+"_climo.nc" /)
 ;
     suffixes = infilenames
-    suffixes = (/"f09.B2000.ft13"+proc_years, "f09.B2000.ft13.yr6_35", "f09.B2000.ft13.yr71_100"/)
+    suffixes = (/"B2000.landTest.chk01.yr1_5", "B2000.WRONG_lnd"+proc_years, "B2000.ft13"+proc_years, "B2000.ft13.yr6_35", "B2000.ft13.yr71_100"/)
+    ;suffixes = (/"f09.B2000.ft13"+proc_years, "f09.B2000.ft13.yr6_35", "f09.B2000.ft13.yr71_100"/)
     ;suffixes = (/"B2000_yhc0610"+proc_years, "f09.B2000.ft13"+proc_years, "f09.B2000.ft13.yr6_35", "f09.B2000.ft13.yr71_100"/)
     ;suffixes = (/"B2000_yhc0610"+proc_years, "f09.B2000.ft13"+proc_years/)
 
@@ -250,6 +254,38 @@ begin
 ;
     suffixes = infilenames
     suffixes = (/"mod_Ke_cldtop_coupled"+proc_years, "mod_Ke_cldtop_ocn_coupled"+proc_years, "mod_Ke_cldtop_SEP_coupled"+proc_years, "mod_Ke_pbltop_coupled"+proc_years/)
+    plotname_head = "fig_wCTL2_B2000"+proc_years+"-"
+
+  ;#######################
+  ;#######################
+  elseif (opt_infiles .eq. "B2000_with_CTL_2_yrs.test01") then
+                 ;"../diag_archive/climo/q2-taiesm1_modified_Ke_Sc_top_sl_kt2_pbltop.F_2000_TAI.f09_f09.0410_1651/q2-taiesm1_modified_Ke_Sc_top_sl_kt2_pbltop.F_2000_TAI.f09_f09.0410_1651_ANN_climo.nc",  \
+                 ; "../diag_archive/climo/q1-taiesm1_CTL.F_2000_TAI.f09_f09.0330_1612/q1-taiesm1_CTL.F_2000_TAI.f09_f09.0330_1612_ANN_climo.nc" /)
+    infilenames = (/  \
+                 "../diag_archive/climo/q2-taiesm1_modified_Ke_Sc_top_sl_kt1_cldtop.B_2000_TAI.f09_g16.0516_0552"+proc_years+"/q2-taiesm1_modified_Ke_Sc_top_sl_kt1_cldtop.B_2000_TAI.f09_g16.0516_0552_"+plotname_step+"_climo.nc", \
+                 "../diag_archive/climo/q2-taiesm1_modified_Ke_Sc_top_sl_kt3_cldtop_ocn.B_2000_TAI.f09_g16.0604_1108"+proc_years+"/q2-taiesm1_modified_Ke_Sc_top_sl_kt3_cldtop_ocn.B_2000_TAI.f09_g16.0604_1108_"+plotname_step+"_climo.nc",  \
+                 "../diag_archive/climo/q2-taiesm1_modified_Ke_Sc_top_sl_kt2_pbltop.B_2000_TAI.f09_g16.0422_1417"+proc_years+"/q2-taiesm1_modified_Ke_Sc_top_sl_kt2_pbltop.B_2000_TAI.f09_g16.0422_1417_"+plotname_step+"_climo.nc",  \
+                 "../diag_archive/climo/q2-taiesm1_modified_Ke_Sc_top_sl_kt4_cldtop_SEP.B_2000_TAI.f09_g16.0610_1301"+proc_years+"/q2-taiesm1_modified_Ke_Sc_top_sl_kt4_cldtop_SEP.B_2000_TAI.f09_g16.0610_1301_"+plotname_step+"_climo.nc",  \
+                 "../diag_archive/climo/q2-taiesm1_modified_Ke_Sc_top_sl_kt2_pbltop.B_2000_TAI.f09_g16.0422_1417"+proc_years+"/q2-taiesm1_modified_Ke_Sc_top_sl_kt2_pbltop.B_2000_TAI.f09_g16.0422_1417_"+plotname_step+"_climo.nc" /)
+;
+    suffixes = infilenames
+    suffixes = (/"mod_Ke_cldtop_coupled"+proc_years, "mod_Ke_cldtop_ocn_coupled"+proc_years, "mod_Ke_pbltop_coupled"+proc_years, "mod_Ke_cldtop_SEP_coupled"+proc_years, "mod_Ke_pbltop_coupled"+proc_years/)
+    plotname_head = "fig_wCTL2_B2000"+proc_years+"-"
+
+  ;#######################
+  ;#######################
+  elseif (opt_infiles .eq. "B2000_with_CTL_2_yrs.test02") then
+                 ;"../diag_archive/climo/q2-taiesm1_modified_Ke_Sc_top_sl_kt2_pbltop.F_2000_TAI.f09_f09.0410_1651/q2-taiesm1_modified_Ke_Sc_top_sl_kt2_pbltop.F_2000_TAI.f09_f09.0410_1651_ANN_climo.nc",  \
+                 ; "../diag_archive/climo/q1-taiesm1_CTL.F_2000_TAI.f09_f09.0330_1612/q1-taiesm1_CTL.F_2000_TAI.f09_f09.0330_1612_ANN_climo.nc" /)
+    infilenames = (/  \
+                 "../diag_archive/climo/q2-taiesm1_modified_Ke_Sc_top_sl_kt1_cldtop.B_2000_TAI.f09_g16.0516_0552"+proc_years+"/q2-taiesm1_modified_Ke_Sc_top_sl_kt1_cldtop.B_2000_TAI.f09_g16.0516_0552_"+plotname_step+"_climo.nc", \
+                 "../diag_archive/climo/q2-taiesm1_modified_Ke_Sc_top_sl_kt3_cldtop_ocn.B_2000_TAI.f09_g16.0604_1108"+proc_years+"/q2-taiesm1_modified_Ke_Sc_top_sl_kt3_cldtop_ocn.B_2000_TAI.f09_g16.0604_1108_"+plotname_step+"_climo.nc",  \
+                 "../diag_archive/climo/q2-taiesm1_modified_Ke_Sc_top_sl_kt2_pbltop.B_2000_TAI.f09_g16.0422_1417"+proc_years+"/q2-taiesm1_modified_Ke_Sc_top_sl_kt2_pbltop.B_2000_TAI.f09_g16.0422_1417_"+plotname_step+"_climo.nc",  \
+                 "../diag_archive/climo/q2-taiesm1_modified_Ke_Sc_top_sl_kt4_cldtop_SEP.B_2000_TAI.f09_g16.0610_1301"+proc_years+"/q2-taiesm1_modified_Ke_Sc_top_sl_kt4_cldtop_SEP.B_2000_TAI.f09_g16.0610_1301_"+plotname_step+"_climo.nc",  \
+                 "../diag_archive/climo/f09.B2000.ft13"+proc_years+"/f09.B2000.ft13_"+plotname_step+"_climo.nc" /)
+;
+    suffixes = infilenames
+    suffixes = (/"mod_Ke_cldtop_coupled"+proc_years, "mod_Ke_cldtop_ocn_coupled"+proc_years, "mod_Ke_pbltop_coupled"+proc_years, "mod_Ke_cldtop_SEP_coupled"+proc_years, "CTL_coupled"+proc_years/)
     plotname_head = "fig_wCTL2_B2000"+proc_years+"-"
 
   ;#######################
@@ -306,8 +342,8 @@ begin
   ;varvars = (/"freq_ke_factor","ke_factor", "z_cldtop_PBL","kvh_kt_orig"/)
   ;varvars = (/"CLDLOW", "TGCLDLWP", "SWCF"/)
   ;varvars = (/"PRECC","PRECL", "TMQ"/)
-  ;varvars = (/"TS"/)
-  varvars = (/"TS","CLDLOW", "TGCLDLWP", "SWCF"/)
+  varvars = (/"TS"/)
+  ;varvars = (/"TS","CLDLOW", "TGCLDLWP", "SWCF"/)
 
 
   ;varvars = (/"SHFLX","LHFLX"/)
