@@ -33,10 +33,10 @@ mach="f1"
 #mach="T3"
 
 if [ $mach == "twnia3" ]; then
-  workdir="/work/$username/"
+  workdir="/work/$username/taiesm_work/"
   queue="ct224"        # name of queue on Taiwania 3. Use "sinfo -s" to view the available queue
 elif [ $mach == "f1" ]; then
-  workdir="/work1/$username/"
+  workdir="/work1/$username/taiesm_work/"
   # name of queue on F1. Use "sinfo -s" to view the available queue
   #queue="ct112"        # num_cpu must be less than 112
   queue="development"   
@@ -62,12 +62,15 @@ compset="B_2000_TAI"
 res="f09_g16"
 
 STOP_OPTION="ndays"
-STOP_N=1
+STOP_N=5
+#STOP_OPTION="nmonths"
+#STOP_N=1
 #STOP_OPTION="nyears"
 #STOP_N=6
 
 #--- simulation case
-WRKDIR="$workdir/taiesm1_modified_Ke_Sc_top/"
+#WRKDIR="$workdir/taiesm1_modified_Ke_Sc_top/"
+WRKDIR="$workdir"
 #CASENAME="xx01-taiesm1.${compset}.${res}.${temp}"
 #CASENAME="y1-hindcast_2001July-taiesm1.${compset}.${res}.${temp}"
 #CASENAME="hindcast02_2001July-taiesm1.${compset}.${res}"
@@ -81,8 +84,11 @@ WRKDIR="$workdir/taiesm1_modified_Ke_Sc_top/"
 #CASENAME="q1-taiesm1_CTL.${compset}.${res}.${temp}"
 #CASENAME="xx_1day-q1-taiesm1_modified_Ke_Sc_top_sl.kt_1.${compset}.${res}.${temp}"
 #CASENAME="xx_1day-q1-taiesm1_modified_Ke_Sc_top_sl.new_kt_1.${compset}.${res}.${temp}"
-CASENAME="xx_1day-q1-taiesm1_modified_Ke_Sc_top_sl.new_kt_2.${compset}.${res}.${temp}"
+#CASENAME="xx_1day-q1-taiesm1_modified_Ke_Sc_top_sl.new_kt_2.${compset}.${res}.${temp}"
 #CASENAME="xx_1day-q1-taiesm1_modified_Ke_Sc_top_sl.old0408.${compset}.${res}.${temp}"
+#CASENAME="xx_1month-taiesm1_CTL.${compset}.${res}.${temp}"
+
+CASENAME="xx_1day-taiesm1_modified_Ke_kt3_cldtop_ocn.${compset}.${res}.${temp}"
 
 CASE="$WRKDIR/$CASENAME"
 
@@ -96,12 +102,12 @@ account="MST111414"   # TCCIP, 2026/04/21
 #num_cpu=128          # number of cpu
 
 #--- source code change
+#do_srcmod="F"
 do_srcmod="T"
 #srcmod_dir="/home/yihsuan123/research/TaiESM1_Sc_diag/scam_taiesm1/script/scam_mods"
 #srcmod_dir="/home/yihsuan123/research/TaiESM_ideas_test/TaiESM_Sc_entrain/scripts/scam_mods.basic"
 #srcmod_dir="/home/yihsuan123/research/TaiESM_ideas_test/TaiESM_Sc_entrain/scripts/scam_mods.modify_pbltop_props.yhc1113.20260408"
 srcmod_dir="/home/yihsuan123/research/TaiESM_ideas_test/TaiESM_Sc_entrain/scripts/scam_mods.modify_pbltop_props.yhc1113"
-
 
 ##################
 # program start
