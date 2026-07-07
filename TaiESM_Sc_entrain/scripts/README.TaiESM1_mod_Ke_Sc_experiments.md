@@ -31,6 +31,20 @@ sl(kt), sl(kt-1) > sl_pblh > sl(kt) & qt(kt-1) < qt_pblh < qt(kt)
 
 "PBL top height is deﬁned as the top external interface of surface-based CL [convective layer]". CL is defined where Ri<0.
 
+
+****************
+yhc, 2026-07-07
+These experiments fix land model "cold start" problems, so the land surface temperature is not too warm compared to previous TaiESM1 B2000 run, f09.B2000.ft13
+****************
+
+# f09.B2000.yhchen.chk02
+- control run
+- 35-year coupled simulations (B2000)
+
+# q3-taiesm1_modified_Ke_sl_kt3_cldtop_ocn.B_2000_TAI.f09_g16.0701_1737
+- modified entrainment flux ONLY on ocean grids (land fraction < 0.5), when ql > 10-6 kg/kg & cloud fraction > 0.5 at the top of the mixed layer
+- 5-year coupled simulations (B2000)
+
 ****************
 yhc, 2026-07-01
 All q2-* exps have too warm land surface temperatures because the land model is "cold start". This issue is fixed in q3-* exps.
