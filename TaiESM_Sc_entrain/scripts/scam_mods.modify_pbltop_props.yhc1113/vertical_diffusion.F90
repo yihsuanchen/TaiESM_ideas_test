@@ -2337,11 +2337,13 @@ contains
     ! =2, modified entrainment flux for all types of boundary layer, regardless of clear sky or cloudy, and on land or ocean.
     ! =3, Same as 1, but only on ocean grids
     ! =4, Same as 1, but only on Southeast Pacific marine Sc region (0-30S, 70W-100W)
+    ! =5, Same as 2, but only on land grids (Antarctic is also excluded)
 
     !integer, parameter :: option_kt = 1  
     !integer, parameter :: option_kt = 2  
     !integer, parameter :: option_kt = 3  
-    integer, parameter :: option_kt = 4
+    !integer, parameter :: option_kt = 4
+    integer, parameter :: option_kt = 5  
 
     !logical :: do_print_out = .true.
     logical :: do_print_out = .false.
@@ -2365,7 +2367,7 @@ contains
     real(r8), parameter :: cldn_thresh     = 0.5_r8     ! fraction
     real(r8), parameter :: landfrac_thresh = 0.5_r8     ! fraction
 
-    real(r8) :: lon_min_SEP, lon_max_SEP, lat_min_SEP, lat_max_SEP
+    real(r8) :: lon_min_SEP, lon_max_SEP, lat_min_SEP, lat_max_SEP, lat_60S
  
     logical :: l_monotonic, l_extrap_ok, l_kt
 
@@ -2396,6 +2398,7 @@ contains
     ! Southeast Atlantic marine Sc: 0-30S, 10W-10E
     lon_min_SEP = degrees_to_radians(-100._r8,"lon") ; lon_max_SEP = degrees_to_radians( -70._r8,"lon")
     lat_min_SEP = degrees_to_radians( -30._r8,"lat") ; lat_max_SEP = degrees_to_radians(   0._r8,"lat")
+    lat_60S     = degrees_to_radians( -60._r8,"lat") 
 
     !-------------------------
     ! loop over each column
@@ -2470,6 +2473,11 @@ contains
             .and. cldn   (i,kt)          > cldn_thresh) then
           l_kt = .true.
         endif
+
+      !--- use the pbl top from the UW scheme
+      elseif (option_kt .eq. 5) then
+        kt = int(kpblh(i)) + 1
+        if (kt > 3 .and. kt < pver+1 .and. landfrac(i) > landfrac_thresh .and. state%lat(i).gt.lat_60S) l_kt = .true.
       
       else
         call endrun('get_inputs_vdiff_offline : option_kt is not supported')
